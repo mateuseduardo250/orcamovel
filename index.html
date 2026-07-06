@@ -1084,10 +1084,10 @@ async function abrirARiPhone(){
     scene.add(arConstruirMovel(THREE, m));
     const exporter = new USDZExporter();
     const dados = await exporter.parse(scene);
-    const blob = new Blob([dados], {type:'model/vnd.usd+zip'});
+    const blob = new Blob([dados], {type:'model/vnd.usdz+zip'});
     const a = document.getElementById('arQL');
-    if(a.href) URL.revokeObjectURL(a.href.split('#')[0]);
-    a.href = URL.createObjectURL(blob) + '#allowsContentScaling=0'; // trava no tamanho REAL
+    if(a.href && a.href.startsWith('blob:')) URL.revokeObjectURL(a.href);
+    a.href = URL.createObjectURL(blob);
     a.click(); // abre o AR Quick Look
   }catch(e){
     alert('Não consegui gerar o modelo 3D — verifica a internet e tenta de novo.');
