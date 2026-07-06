@@ -88,6 +88,15 @@
   .cv input{width:auto; padding:0; margin:0;}
   #camMsg{position:absolute; top:44%; left:0; right:0; text-align:center; color:#fff; padding:20px; z-index:101; display:none; text-shadow:0 1px 4px #000;}
 
+  /* modo VR (WebXR) */
+  #arOverlay{display:none; position:fixed; inset:0; z-index:200; pointer-events:none;}
+  #arOverlay.show{display:block;}
+  #arTopo{position:absolute; top:0; left:0; right:0; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; background:linear-gradient(rgba(0,0,0,.6),transparent); pointer-events:auto;}
+  #arPreco{color:#fff; font-size:22px; font-weight:800; text-shadow:0 1px 4px #000;}
+  #arDica{position:absolute; top:44%; left:0; right:0; text-align:center; color:#fff; text-shadow:0 1px 4px #000; padding:0 30px; font-size:15px;}
+  #arBase{position:absolute; bottom:0; left:0; right:0; padding:14px 16px 24px; background:linear-gradient(transparent,rgba(0,0,0,.75)); pointer-events:auto;}
+  #arBase select{width:100%; padding:10px; border-radius:8px; font-size:15px; border:1px solid rgba(255,255,255,.5);}
+
   /* orçamento / impressão */
   #orcDoc{background:#fff; border:1px solid var(--borda); border-radius:12px; padding:20px;}
   #orcDoc h3{color:var(--madeira-escura); font-size:18px;}
@@ -151,6 +160,7 @@
       </div>
       <div class="desenho" id="desenhoModulo"></div>
       <button class="btn claro" onclick="abrirCamera()">📷 Ver no ambiente — "holograma"</button>
+      <button class="btn claro" onclick="abrirAR()">🥽 Modo VR — fixar móveis no quarto (beta)</button>
       <button class="btn" onclick="addModulo()">➕ Adicionar ao projeto</button>
     </div>
 
@@ -272,6 +282,22 @@
     <div style="display:flex; gap:10px; margin-top:10px;">
       <button class="cam-btn" onclick="togglePortas()">🚪 Abrir/fechar</button>
       <button class="cam-btn" style="flex:1" onclick="tirarFoto()">📸 Foto pro cliente</button>
+    </div>
+  </div>
+</div>
+
+<!-- modo VR (WebXR — móveis fixados no ambiente) -->
+<div id="arOverlay">
+  <div id="arTopo">
+    <div id="arPreco">R$ 0</div>
+    <button class="cam-btn" onclick="sairAR()">✕ sair</button>
+  </div>
+  <div id="arDica">Mova o celular devagar apontando pro chão do quarto até aparecer o <b>círculo verde</b> 👇 aí toque em FIXAR</div>
+  <div id="arBase">
+    <select id="arTipo"></select>
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <button class="cam-btn" style="flex:1; font-size:16px;" onclick="arFixar()">📌 FIXAR AQUI</button>
+      <button class="cam-btn" onclick="arDesfazer()">↩ desfazer</button>
     </div>
   </div>
 </div>
@@ -969,6 +995,180 @@ function tirarFoto(){
   a.download = 'movel-no-ambiente.png';
   a.href = cv.toDataURL('image/png');
   a.click();
+}
+
+/* ================== MODO VR — WebXR (móveis fixados no mundo) ================== */
+let arSess=null, arT=null, arRenderer=null, arScene=null, arCamera=null,
+    arReticle=null, arHitSource=null, arRefSpace=null, arColocados=[];
+
+function arPreencherTipos(){
+  const sel = document.getElementById('arTipo');
+  sel.innerHTML = Object.keys(TIPOS).map(k=>`<option value="${k}">${TIPOS[k].nome} (${TIPOS[k].L}×${TIPOS[k].A}×${TIPOS[k].P}cm)</option>`).join('');
+  sel.value = 'guarda';
+}
+
+function arAtualizaPreco(){
+  let custo = arColocados.reduce((a,c)=>a+c.custo, 0);
+  if(arColocados.length) custo += Number(db.config.consumiveis)||0;
+  const final = custo * (1 + (Number(db.config.margem)||0)/100);
+  document.getElementById('arPreco').textContent = fmt(final);
+}
+
+/* constrói o móvel em 3D real (metros) — portas fechadas, gavetas, prateleiras */
+function arConstruirMovel(THREE, m){
+  const g = new THREE.Group();
+  const L=m.L/100, A=m.A/100, P=m.P/100, t=0.018, tf=0.01;
+  const matExt = new THREE.MeshStandardMaterial({color:0xC89B69, roughness:.75});
+  const matInt = new THREE.MeshStandardMaterial({color:0xD9B181, roughness:.85});
+  const matEsc = new THREE.MeshStandardMaterial({color:0x3d2810, roughness:.6});
+  const cx=(w,h,d,x,y,z,mat)=>{
+    const ms = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+    ms.position.set(x,y,z); g.add(ms);
+  };
+  cx(t, A, P, -(L-t)/2, A/2, 0, matExt);              // lateral esq
+  cx(t, A, P,  (L-t)/2, A/2, 0, matExt);              // lateral dir
+  cx(L-2*t, t, P, 0, A-t/2, 0, matExt);               // tampo
+  cx(L-2*t, t, P, 0, t/2, 0, matExt);                 // base
+  cx(L, A, tf, 0, A/2, -(P-tf)/2, matInt);            // fundo (costas)
+  for(let i=1;i<=m.prat;i++){                          // prateleiras
+    const y = A*i/(m.prat+1);
+    cx(L-2*t, t, P-tf-0.005, 0, y, tf/2, matInt);
+  }
+  const gh = Math.min(0.25, A/6);                      // gavetas (frentes)
+  for(let i=0;i<m.gav;i++){
+    const y = t + gh/2 + i*gh;
+    cx(L-2*t-0.01, gh-0.015, t, 0, y, (P-t)/2+0.002, matExt);
+    cx(0.12, 0.02, 0.02, 0, y, P/2+0.012, matEsc);    // puxador
+  }
+  if(m.portas>0){                                      // portas fechadas
+    const vao = L-2*t, pw = vao/m.portas - 0.004;
+    const yPorta = m.gav>0 ? (t+gh*m.gav + A-t)/2 : A/2;
+    const hPorta = m.gav>0 ? (A-t) - (t+gh*m.gav) - 0.006 : A-2*t-0.006;
+    for(let i=0;i<m.portas;i++){
+      const x = -vao/2 + (i+0.5)*vao/m.portas;
+      cx(pw, hPorta, t, x, yPorta, (P+t)/2+0.002, matExt);
+      const lado = (i%2===0) ? 0.38 : -0.38;
+      cx(0.02, 0.12, 0.02, x+lado*pw, yPorta, (P+t)/2+t, matEsc); // puxador
+    }
+  }
+  return g;
+}
+
+async function abrirAR(){
+  if(!navigator.xr){
+    alert('Este navegador não tem AR de verdade (WebXR).\n\nFunciona no CHROME de celulares ANDROID compatíveis com ARCore.\niPhone não suporta — use o modo 📷 câmera normal.');
+    return;
+  }
+  let suporta = false;
+  try{ suporta = await navigator.xr.isSessionSupported('immersive-ar'); }catch(e){}
+  if(!suporta){
+    alert('Este aparelho não suporta AR imersivo.\n\nSe for Android: instale/atualize o "Google Play Services para AR" na Play Store e tente de novo.\nSe for iPhone: use o modo 📷 câmera normal.');
+    return;
+  }
+  try{
+    arT = await import('https://unpkg.com/three@0.160.1/build/three.module.js');
+  }catch(e){
+    alert('Não consegui carregar o motor 3D — verifica a internet e tenta de novo.');
+    return;
+  }
+  const THREE = arT;
+  arPreencherTipos();
+  arColocados = [];
+  arAtualizaPreco();
+
+  arScene = new THREE.Scene();
+  arCamera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.01, 30);
+  arScene.add(new THREE.HemisphereLight(0xffffff, 0x887755, 1.1));
+  const luz = new THREE.DirectionalLight(0xffffff, 0.8);
+  luz.position.set(0.5, 1.5, 0.6);
+  arScene.add(luz);
+
+  arReticle = new THREE.Mesh(
+    new THREE.RingGeometry(0.09, 0.12, 32).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({color:0x2ecc71})
+  );
+  arReticle.matrixAutoUpdate = false;
+  arReticle.visible = false;
+  arScene.add(arReticle);
+
+  arRenderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  arRenderer.setPixelRatio(devicePixelRatio);
+  arRenderer.setSize(innerWidth, innerHeight);
+  arRenderer.xr.enabled = true;
+  document.body.appendChild(arRenderer.domElement);
+
+  const overlay = document.getElementById('arOverlay');
+  try{
+    arSess = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures:['hit-test'],
+      optionalFeatures:['dom-overlay'],
+      domOverlay:{root: overlay},
+    });
+  }catch(e){
+    arRenderer.domElement.remove();
+    alert('O celular recusou a sessão de AR. Fecha outros apps de câmera e tenta de novo.');
+    return;
+  }
+  overlay.classList.add('show');
+  document.getElementById('arDica').style.display = 'block';
+
+  arRenderer.xr.setReferenceSpaceType('local');
+  await arRenderer.xr.setSession(arSess);
+  arRefSpace = await arSess.requestReferenceSpace('local');
+  const viewerSpace = await arSess.requestReferenceSpace('viewer');
+  arHitSource = await arSess.requestHitTestSource({space: viewerSpace});
+
+  arSess.addEventListener('end', arLimpar);
+
+  arRenderer.setAnimationLoop((time, frame)=>{
+    if(frame && arHitSource){
+      const hits = frame.getHitTestResults(arHitSource);
+      if(hits.length){
+        const pose = hits[0].getPose(arRefSpace);
+        arReticle.visible = true;
+        arReticle.matrix.fromArray(pose.transform.matrix);
+        document.getElementById('arDica').style.display = 'none';
+      } else {
+        arReticle.visible = false;
+      }
+    }
+    arRenderer.render(arScene, arCamera);
+  });
+}
+
+function arFixar(){
+  if(!arReticle || !arReticle.visible){
+    document.getElementById('arDica').style.display = 'block';
+    return;
+  }
+  const THREE = arT;
+  const tipo = document.getElementById('arTipo').value;
+  const m = TIPOS[tipo];
+  const g = arConstruirMovel(THREE, m);
+  const pos = new THREE.Vector3().setFromMatrixPosition(arReticle.matrix);
+  g.position.copy(pos);
+  // vira a frente do móvel pra quem está segurando o celular
+  const camPos = new THREE.Vector3().setFromMatrixPosition(arCamera.matrixWorld);
+  g.rotation.y = Math.atan2(camPos.x - pos.x, camPos.z - pos.z);
+  arScene.add(g);
+  arColocados.push({g, custo: calcularModulo(m).custo});
+  if(navigator.vibrate) navigator.vibrate(30);
+  arAtualizaPreco();
+}
+function arDesfazer(){
+  const ultimo = arColocados.pop();
+  if(ultimo) arScene.remove(ultimo.g);
+  arAtualizaPreco();
+}
+function sairAR(){ if(arSess) arSess.end(); }
+function arLimpar(){
+  document.getElementById('arOverlay').classList.remove('show');
+  if(arRenderer){
+    arRenderer.setAnimationLoop(null);
+    arRenderer.domElement.remove();
+    arRenderer.dispose();
+  }
+  arSess = null; arHitSource = null; arColocados = [];
 }
 
 /* ================== INICIALIZAÇÃO ================== */
