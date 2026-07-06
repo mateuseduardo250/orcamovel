@@ -10,7 +10,8 @@
     --verde:#1E7D45; --verde-claro:#E6F4EC; --cinza:#6B6B6B;
     --borda:#E5D9C8; --vermelho:#C0392B;
   }
-  *{box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',Roboto,Arial,sans-serif;}
+  *{box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',Roboto,Arial,sans-serif; touch-action:manipulation; -webkit-tap-highlight-color:transparent;}
+  button{user-select:none; -webkit-user-select:none;}
   body{background:var(--creme); color:#2B2B2B; padding-bottom:150px;}
 
   header{background:var(--madeira-escura); color:#fff; padding:14px 16px; position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:10px;}
@@ -646,7 +647,8 @@ function boxFaces(x1,x2,y1,y2,z1,z2,cor){
 
 function desenhaMovel3D(ctx, W, H){
   const m = lerModuloForm();
-  const s = (Math.min(W,H)*0.55/Math.max(m.L, m.A)) * cam3d.s;
+  // escala fixada na abertura da câmera: mudar medidas muda SÓ a peça, não o zoom
+  const s = (Math.min(W,H)*0.55/(cam3d.norm || Math.max(m.L, m.A))) * cam3d.s;
   const cx = W/2 + cam3d.x, cy = H/2 + cam3d.y;
   const hw = m.L/2, hh = m.A/2, hd = m.P/2;
   const t = 2.5, tf = 1.5; // espessura das tábuas / do fundo
@@ -740,7 +742,7 @@ window.addEventListener('resize', ()=>{
 async function abrirCamera(){
   const m = lerModuloForm();
   if(m.L<=0||m.A<=0){ alert('Preencha as medidas do módulo primeiro.'); return; }
-  cam3d = {x:0, y:0, s:1, rot:0.5, tilt:-0.1};
+  cam3d = {x:0, y:0, s:1, rot:0.5, tilt:-0.1, norm:Math.max(m.L, m.A)};
   camVis = {portas:true, gavetas:true, prateleiras:true, fundo:true, tampo:true, base:true, laterais:true};
   camAnim = {portas:{}, gavetas:{}}; camAnimTarget = {portas:{}, gavetas:{}};
   document.querySelectorAll('.camvis').forEach(c=> c.checked = true);
@@ -854,18 +856,42 @@ function camAlt(id, delta, min){
   renderCam();         // redesenha o 3D
 }
 
-/* arrastar = girar | segurar meio segundo e arrastar = mover */
+/* 1 dedo: arrastar = girar | segurar meio segundo = mover | toque = abrir peça
+   2 dedos: pinça = aumentar/diminuir o móvel */
+let camPinch = null;
+const camPtrs = new Map();
+
 camCv.addEventListener('pointerdown', e=>{
-  camDrag = {x:e.clientX, y:e.clientY, rot:cam3d.rot, tilt:cam3d.tilt, ox:cam3d.x, oy:cam3d.y, mode:'pending'};
   camCv.setPointerCapture(e.pointerId);
-  camHoldTimer = setTimeout(()=>{
-    if(camDrag && camDrag.mode==='pending'){
-      camDrag.mode = 'mover';
-      if(navigator.vibrate) navigator.vibrate(40); // avisa que "pegou" o móvel
-    }
-  }, 350);
+  camPtrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if(camPtrs.size === 2){
+    // virou pinça: cancela arrasto/segurar
+    clearTimeout(camHoldTimer); camDrag = null;
+    const pts = [...camPtrs.values()];
+    camPinch = { d: Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y), s: cam3d.s };
+  } else if(camPtrs.size === 1){
+    camDrag = {x:e.clientX, y:e.clientY, rot:cam3d.rot, tilt:cam3d.tilt, ox:cam3d.x, oy:cam3d.y, mode:'pending'};
+    camHoldTimer = setTimeout(()=>{
+      if(camDrag && camDrag.mode==='pending'){
+        camDrag.mode = 'mover';
+        if(navigator.vibrate) navigator.vibrate(40); // avisa que "pegou" o móvel
+      }
+    }, 350);
+  }
 });
 camCv.addEventListener('pointermove', e=>{
+  if(!camPtrs.has(e.pointerId)) return;
+  camPtrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if(camPinch && camPtrs.size >= 2){
+    const pts = [...camPtrs.values()];
+    const d = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+    if(camPinch.d > 0){
+      cam3d.s = Math.min(5, Math.max(0.2, camPinch.s * d/camPinch.d));
+      document.getElementById('camScale').value = Math.min(3, Math.max(0.3, cam3d.s));
+      renderCam();
+    }
+    return;
+  }
   if(!camDrag) return;
   const dx = e.clientX - camDrag.x, dy = e.clientY - camDrag.y;
   if(camDrag.mode==='pending' && Math.hypot(dx,dy) > 10){
@@ -882,10 +908,14 @@ camCv.addEventListener('pointermove', e=>{
     renderCam();
   }
 });
-const camSolta = ()=>{ camDrag = null; clearTimeout(camHoldTimer); };
+const camSolta = e=>{
+  if(e) camPtrs.delete(e.pointerId);
+  if(camPtrs.size < 2) camPinch = null;
+  if(camPtrs.size === 0){ camDrag = null; clearTimeout(camHoldTimer); }
+};
 camCv.addEventListener('pointerup', e=>{
-  if(camDrag && camDrag.mode==='pending') tocarMovel(e.clientX, e.clientY); // toque rápido = abrir peça
-  camSolta();
+  if(camDrag && camDrag.mode==='pending' && !camPinch) tocarMovel(e.clientX, e.clientY); // toque rápido = abrir peça
+  camSolta(e);
 });
 camCv.addEventListener('pointercancel', camSolta);
 
