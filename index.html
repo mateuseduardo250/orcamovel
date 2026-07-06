@@ -174,6 +174,13 @@
         <div><label>Prateleiras</label><input id="mPrat" type="number" value="1" min="0"></div>
       </div>
       <div class="desenho" id="desenhoModulo"></div>
+      <div class="row" style="margin-top:10px;">
+        <div><label>📐 Parede — larg. (<span class="lblUn">cm</span>)</label><input id="parL" type="number" value="400"></div>
+        <div><label>📐 Parede — alt. (<span class="lblUn">cm</span>)</label><input id="parA" type="number" value="280"></div>
+      </div>
+      <label style="display:flex; align-items:center; gap:6px; font-weight:400; margin-top:8px;">
+        <input type="checkbox" id="parInc" style="width:auto;"> Incluir parede de referência no AR (grade de 50cm)
+      </label>
       <button class="btn claro" onclick="abrirCamera()">📷 Ver no ambiente — "holograma"</button>
       <button class="btn claro" onclick="abrirAR()">🥽 Modo VR — fixar móveis no quarto (beta)</button>
       <button class="btn" onclick="addModulo()">➕ Adicionar ao projeto</button>
@@ -479,7 +486,7 @@ function trocarUnidade(){
   const nova = document.getElementById('mUnidade').value;
   const antiga = unidade();
   if(nova !== antiga){
-    ['mL','mA','mP'].forEach(id=>{
+    ['mL','mA','mP','parL','parA'].forEach(id=>{
       const el = document.getElementById(id);
       const cm = (Number(el.value)||0) * U2CM[antiga];
       const v = cm / U2CM[nova];
@@ -1047,7 +1054,8 @@ let arSess=null, arT=null, arRenderer=null, arScene=null, arCamera=null,
 
 function arPreencherTipos(){
   const sel = document.getElementById('arTipo');
-  sel.innerHTML = Object.keys(TIPOS).map(k=>`<option value="${k}">${TIPOS[k].nome} (${TIPOS[k].L}×${TIPOS[k].A}×${TIPOS[k].P}cm)</option>`).join('');
+  sel.innerHTML = Object.keys(TIPOS).map(k=>`<option value="${k}">${TIPOS[k].nome} (${TIPOS[k].L}×${TIPOS[k].A}×${TIPOS[k].P}cm)</option>`).join('')
+    + '<option value="parede">📐 Parede de referência (grade 50cm)</option>';
   sel.value = 'guarda';
 }
 
@@ -1056,6 +1064,45 @@ function arAtualizaPreco(){
   if(arColocados.length) custo += Number(db.config.consumiveis)||0;
   const final = custo * (1 + (Number(db.config.margem)||0)/100);
   document.getElementById('arPreco').textContent = fmt(final);
+}
+
+/* lê as medidas da parede de referência (na unidade escolhida) -> cm */
+function lerParede(){
+  const f = U2CM[unidade()];
+  return {
+    L:(Number(document.getElementById('parL').value)||0)*f,
+    A:(Number(document.getElementById('parA').value)||0)*f,
+  };
+}
+
+/* parede de referência: painel semitransparente com grade de 50cm, em tamanho real */
+function arConstruirParede(THREE, Lcm, Acm){
+  const L=Lcm/100, A=Acm/100, esp=0.015;
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({color:0xAFC3CF, transparent:true, opacity:0.4, roughness:.9});
+  const painel = new THREE.Mesh(new THREE.BoxGeometry(L, A, esp), mat);
+  painel.position.set(0, A/2, 0);
+  g.add(painel);
+  const matLinha = new THREE.MeshStandardMaterial({color:0x2c4a5c});
+  for(let x=0.5; x<L-0.01; x+=0.5){   // linhas verticais a cada 50cm
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.006, A, esp+0.004), matLinha);
+    l.position.set(x - L/2, A/2, 0); g.add(l);
+  }
+  for(let y=0.5; y<A-0.01; y+=0.5){   // linhas horizontais a cada 50cm
+    const l = new THREE.Mesh(new THREE.BoxGeometry(L, 0.006, esp+0.004), matLinha);
+    l.position.set(0, y, 0); g.add(l);
+  }
+  // moldura
+  const matBorda = new THREE.MeshStandardMaterial({color:0x1f3642});
+  [[0,A,0.02,A/2,-L/2],[0,A,0.02,A/2,L/2]].forEach(b=>{
+    const m2 = new THREE.Mesh(new THREE.BoxGeometry(0.02, b[1], esp+0.004), matBorda);
+    m2.position.set(b[4], b[3], 0); g.add(m2);
+  });
+  const topo = new THREE.Mesh(new THREE.BoxGeometry(L, 0.02, esp+0.004), matBorda);
+  topo.position.set(0, A-0.01, 0); g.add(topo);
+  const chao = new THREE.Mesh(new THREE.BoxGeometry(L, 0.02, esp+0.004), matBorda);
+  chao.position.set(0, 0.01, 0); g.add(chao);
+  return g;
 }
 
 /* constrói o móvel em 3D real (metros) — portas fechadas, gavetas, prateleiras */
@@ -1120,6 +1167,14 @@ async function abrirARiPhone(){
     const {USDZExporter} = await import('three/addons/exporters/USDZExporter.js');
     const scene = new THREE.Scene();
     scene.add(arConstruirMovel(THREE, m));
+    if(document.getElementById('parInc').checked){
+      const par = lerParede();
+      if(par.L>0 && par.A>0){
+        const parede = arConstruirParede(THREE, par.L, par.A);
+        parede.position.z = -(m.P/100)/2 - 0.02; // logo atrás do móvel
+        scene.add(parede);
+      }
+    }
     const exporter = new USDZExporter();
     const dados = await exporter.parse(scene);
     const blob = new Blob([dados], {type:'model/vnd.usdz+zip'});
@@ -1211,15 +1266,23 @@ function arFixar(){
   }
   const THREE = arT;
   const tipo = document.getElementById('arTipo').value;
-  const m = TIPOS[tipo];
-  const g = arConstruirMovel(THREE, m);
+  let g, custo = 0;
+  if(tipo === 'parede'){
+    const par = lerParede();
+    if(par.L<=0 || par.A<=0){ alert('Defina largura e altura da parede na aba Montar.'); return; }
+    g = arConstruirParede(THREE, par.L, par.A); // parede não soma no preço
+  } else {
+    const m = TIPOS[tipo];
+    g = arConstruirMovel(THREE, m);
+    custo = calcularModulo(m).custo;
+  }
   const pos = new THREE.Vector3().setFromMatrixPosition(arReticle.matrix);
   g.position.copy(pos);
   // vira a frente do móvel pra quem está segurando o celular
   const camPos = new THREE.Vector3().setFromMatrixPosition(arCamera.matrixWorld);
   g.rotation.y = Math.atan2(camPos.x - pos.x, camPos.z - pos.z);
   arScene.add(g);
-  arColocados.push({g, custo: calcularModulo(m).custo});
+  arColocados.push({g, custo});
   if(navigator.vibrate) navigator.vibrate(30);
   arAtualizaPreco();
 }
@@ -1244,7 +1307,7 @@ carregarConfig();
 document.getElementById('mUnidade').value = unidade();
 document.querySelectorAll('.lblUn,.ceUn').forEach(s=> s.textContent = unidade());
 if(unidade()!=='cm'){ // converte os valores iniciais (que estão em cm) pra unidade salva
-  ['mL','mA','mP'].forEach(id=>{
+  ['mL','mA','mP','parL','parA'].forEach(id=>{
     const el = document.getElementById(id);
     const v = (Number(el.value)||0) / U2CM[unidade()];
     el.value = unidade()==='m' ? Math.round(v*100)/100 : Math.round(v);
