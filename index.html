@@ -143,18 +143,30 @@
 
     <div class="card">
       <span class="badge">ADICIONAR MÓDULO</span>
-      <label>Tipo</label>
-      <select id="mTipo" onchange="preencherPadrao()">
-        <option value="aereo">Armário aéreo</option>
-        <option value="base">Balcão / armário base</option>
-        <option value="guarda">Guarda-roupa</option>
-        <option value="gaveteiro">Gaveteiro</option>
-        <option value="estante">Estante / nicho</option>
-      </select>
       <div class="row">
-        <div><label>Largura (cm)</label><input id="mL" type="number" value="120"></div>
-        <div><label>Altura (cm)</label><input id="mA" type="number" value="70"></div>
-        <div><label>Prof. (cm)</label><input id="mP" type="number" value="35"></div>
+        <div style="flex:2">
+          <label>Tipo</label>
+          <select id="mTipo" onchange="preencherPadrao()">
+            <option value="aereo">Armário aéreo</option>
+            <option value="base">Balcão / armário base</option>
+            <option value="guarda">Guarda-roupa</option>
+            <option value="gaveteiro">Gaveteiro</option>
+            <option value="estante">Estante / nicho</option>
+          </select>
+        </div>
+        <div>
+          <label>Unidade</label>
+          <select id="mUnidade" onchange="trocarUnidade()">
+            <option value="mm">mm</option>
+            <option value="cm" selected>cm</option>
+            <option value="m">m</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div><label>Largura (<span class="lblUn">cm</span>)</label><input id="mL" type="number" value="120"></div>
+        <div><label>Altura (<span class="lblUn">cm</span>)</label><input id="mA" type="number" value="70"></div>
+        <div><label>Prof. (<span class="lblUn">cm</span>)</label><input id="mP" type="number" value="35"></div>
       </div>
       <div class="row">
         <div><label>Portas</label><input id="mPortas" type="number" value="2" min="0"></div>
@@ -252,9 +264,9 @@
     </div>
   </div>
   <div id="camEdit">
-    <div class="ce-row"><span class="nome">Largura</span><button onclick="camAlt('mL',-10,20)">−</button><b id="ceL">120</b><button onclick="camAlt('mL',10,20)">+</button><span>cm</span></div>
-    <div class="ce-row"><span class="nome">Altura</span><button onclick="camAlt('mA',-10,20)">−</button><b id="ceA">70</b><button onclick="camAlt('mA',10,20)">+</button><span>cm</span></div>
-    <div class="ce-row"><span class="nome">Profund.</span><button onclick="camAlt('mP',-5,15)">−</button><b id="ceP">35</b><button onclick="camAlt('mP',5,15)">+</button><span>cm</span></div>
+    <div class="ce-row"><span class="nome">Largura</span><button onclick="camAlt('mL',-10,20)">−</button><b id="ceL">120</b><button onclick="camAlt('mL',10,20)">+</button><span class="ceUn">cm</span></div>
+    <div class="ce-row"><span class="nome">Altura</span><button onclick="camAlt('mA',-10,20)">−</button><b id="ceA">70</b><button onclick="camAlt('mA',10,20)">+</button><span class="ceUn">cm</span></div>
+    <div class="ce-row"><span class="nome">Profund.</span><button onclick="camAlt('mP',-5,15)">−</button><b id="ceP">35</b><button onclick="camAlt('mP',5,15)">+</button><span class="ceUn">cm</span></div>
     <div class="ce-row"><span class="nome">Portas</span><button onclick="camAlt('mPortas',-1,0)">−</button><b id="cePortas">2</b><button onclick="camAlt('mPortas',1,0)">+</button></div>
     <div class="ce-row"><span class="nome">Gavetas</span><button onclick="camAlt('mGav',-1,0)">−</button><b id="ceGav">0</b><button onclick="camAlt('mGav',1,0)">+</button></div>
     <div class="ce-row"><span class="nome">Prateleiras</span><button onclick="camAlt('mPrat',-1,0)">−</button><b id="cePrat">1</b><button onclick="camAlt('mPrat',1,0)">+</button></div>
@@ -456,22 +468,46 @@ function salvarProjetoAtual(){
 }
 
 /* ================== MÓDULOS ================== */
+/* unidades: marceneiro trabalha em mm; interno é sempre cm */
+const U2CM = {mm:0.1, cm:1, m:100};
+function unidade(){ return (db.config.unidade in U2CM) ? db.config.unidade : 'cm'; }
+function medNum(cm){ // converte cm -> unidade atual, pra exibir
+  const u = unidade(), v = cm / U2CM[u];
+  return u==='m' ? Math.round(v*100)/100 : Math.round(v);
+}
+function trocarUnidade(){
+  const nova = document.getElementById('mUnidade').value;
+  const antiga = unidade();
+  if(nova !== antiga){
+    ['mL','mA','mP'].forEach(id=>{
+      const el = document.getElementById(id);
+      const cm = (Number(el.value)||0) * U2CM[antiga];
+      const v = cm / U2CM[nova];
+      el.value = nova==='m' ? Math.round(v*100)/100 : Math.round(v);
+    });
+    db.config.unidade = nova; salvar();
+  }
+  document.querySelectorAll('.lblUn,.ceUn').forEach(s=> s.textContent = nova);
+  desenhar(); renderCamEdit(); renderModulos(); calcular();
+}
+
 function preencherPadrao(){
   const t = TIPOS[document.getElementById('mTipo').value];
-  document.getElementById('mL').value = t.L;
-  document.getElementById('mA').value = t.A;
-  document.getElementById('mP').value = t.P;
+  document.getElementById('mL').value = medNum(t.L);
+  document.getElementById('mA').value = medNum(t.A);
+  document.getElementById('mP').value = medNum(t.P);
   document.getElementById('mPortas').value = t.portas;
   document.getElementById('mGav').value = t.gav;
   document.getElementById('mPrat').value = t.prat;
   desenhar();
 }
 function lerModuloForm(){
+  const f = U2CM[unidade()]; // entrada na unidade escolhida -> cm interno
   return {
     tipo: document.getElementById('mTipo').value,
-    L:Number(document.getElementById('mL').value)||0,
-    A:Number(document.getElementById('mA').value)||0,
-    P:Number(document.getElementById('mP').value)||0,
+    L:(Number(document.getElementById('mL').value)||0)*f,
+    A:(Number(document.getElementById('mA').value)||0)*f,
+    P:(Number(document.getElementById('mP').value)||0)*f,
     portas:Number(document.getElementById('mPortas').value)||0,
     gav:Number(document.getElementById('mGav').value)||0,
     prat:Number(document.getElementById('mPrat').value)||0,
@@ -497,7 +533,7 @@ function renderModulos(){
   el.innerHTML = db.projetos[projetoAtual].modulos.map((m,i)=>{
     const d = calcularModulo(m);
     return `<div class="mod-item">
-      <div class="titulo">${TIPOS[m.tipo].nome} — ${m.L}×${m.A}×${m.P} cm</div>
+      <div class="titulo">${TIPOS[m.tipo].nome} — ${medNum(m.L)}×${medNum(m.A)}×${medNum(m.P)} ${unidade()}</div>
       <div class="det">${m.portas} porta(s) · ${m.gav} gaveta(s) · ${m.prat} prateleira(s) · ${d.chapas15} chapa(s) 15mm · ${d.fita}m de fita</div>
       <div class="preco">${modoCliente ? '' : 'material: '+fmt(d.custo)}</div>
       <button class="btn mini vermelho" onclick="removerModulo(${i})">remover</button>
@@ -533,7 +569,7 @@ function desenhar(){
     `<svg width="${w+20}" height="${h+26}" style="max-width:100%">
        <rect x="2" y="2" width="${w-4}" height="${h-4}" fill="#F5E9D6" stroke="#5C3A1A" stroke-width="2" rx="3"/>
        ${dentro}
-       <text x="${w/2}" y="${h+18}" text-anchor="middle" font-size="11" fill="#6B6B6B">${m.L}cm × ${m.A}cm × ${m.P}cm</text>
+       <text x="${w/2}" y="${h+18}" text-anchor="middle" font-size="11" fill="#6B6B6B">${medNum(m.L)} × ${medNum(m.A)} × ${medNum(m.P)} ${unidade()}</text>
      </svg>`;
 }
 ['mL','mA','mP','mPortas','mGav','mPrat'].forEach(id=>{
@@ -621,7 +657,7 @@ function verOrcamento(){
     <p style="margin:10px 0 4px; font-weight:700;">Cliente: ${p.cliente || '—'}</p>
     ${p.modulos.map((m,i)=>`
       <div class="linha">
-        <span>${TIPOS[m.tipo].nome}<br><small class="muted">${m.L}×${m.A}×${m.P} cm · ${m.portas} porta(s) · ${m.gav} gaveta(s) · ${m.prat} prateleira(s)</small></span>
+        <span>${TIPOS[m.tipo].nome}<br><small class="muted">${medNum(m.L)}×${medNum(m.A)}×${medNum(m.P)} ${unidade()} · ${m.portas} porta(s) · ${m.gav} gaveta(s) · ${m.prat} prateleira(s)</small></span>
       </div>`).join('')}
     <div class="linha"><span>Material, ferragens e acabamento</span><span>incluído</span></div>
     <div class="linha"><span>Mão de obra especializada</span><span>incluída</span></div>
@@ -639,7 +675,7 @@ function enviarWhats(){
 `🔨 *Orçamento — ${db.config.nome || 'Marcenaria'}*
 Cliente: ${p.cliente || '—'}
 
-${p.modulos.map(m=>`▪ ${TIPOS[m.tipo].nome} ${m.L}×${m.A}×${m.P}cm (${m.portas} porta(s), ${m.gav} gaveta(s), ${m.prat} prateleira(s))`).join('\n')}
+${p.modulos.map(m=>`▪ ${TIPOS[m.tipo].nome} ${medNum(m.L)}×${medNum(m.A)}×${medNum(m.P)}${unidade()} (${m.portas} porta(s), ${m.gav} gaveta(s), ${m.prat} prateleira(s))`).join('\n')}
 
 Material, ferragens e mão de obra incluídos.
 *Total: ${fmt(c.final)}*
@@ -901,17 +937,19 @@ function atualizarPrecoCam(){
   document.getElementById('camPreco').textContent = fmt(final);
 }
 function renderCamEdit(){
-  const m = lerModuloForm();
-  document.getElementById('ceL').textContent = m.L;
-  document.getElementById('ceA').textContent = m.A;
-  document.getElementById('ceP').textContent = m.P;
-  document.getElementById('cePortas').textContent = m.portas;
-  document.getElementById('ceGav').textContent = m.gav;
-  document.getElementById('cePrat').textContent = m.prat;
+  document.getElementById('ceL').textContent = document.getElementById('mL').value;
+  document.getElementById('ceA').textContent = document.getElementById('mA').value;
+  document.getElementById('ceP').textContent = document.getElementById('mP').value;
+  document.getElementById('cePortas').textContent = document.getElementById('mPortas').value;
+  document.getElementById('ceGav').textContent = document.getElementById('mGav').value;
+  document.getElementById('cePrat').textContent = document.getElementById('mPrat').value;
 }
 function camAlt(id, delta, min){
   const el = document.getElementById(id);
-  el.value = Math.max(min, (Number(el.value)||0) + delta);
+  const ehMedida = (id==='mL' || id==='mA' || id==='mP');
+  const f = ehMedida ? U2CM[unidade()] : 1; // delta/min chegam em cm
+  const v = Math.max(min/f, (Number(el.value)||0) + delta/f);
+  el.value = (ehMedida && unidade()==='m') ? Math.round(v*100)/100 : Math.round(v);
   desenhar();          // atualiza o desenho do formulário também
   renderCamEdit();
   atualizarPrecoCam(); // preço vivo na câmera
@@ -1203,6 +1241,15 @@ function arLimpar(){
 
 /* ================== INICIALIZAÇÃO ================== */
 carregarConfig();
+document.getElementById('mUnidade').value = unidade();
+document.querySelectorAll('.lblUn,.ceUn').forEach(s=> s.textContent = unidade());
+if(unidade()!=='cm'){ // converte os valores iniciais (que estão em cm) pra unidade salva
+  ['mL','mA','mP'].forEach(id=>{
+    const el = document.getElementById(id);
+    const v = (Number(el.value)||0) / U2CM[unidade()];
+    el.value = unidade()==='m' ? Math.round(v*100)/100 : Math.round(v);
+  });
+}
 renderProjetos();
 renderMateriais();
 desenhar();
