@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Orçamóvel — Orçamento vivo pra marceneiro</title>
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.1/examples/jsm/"}}
+</script>
 <style>
   :root{
     --madeira:#8B5A2B; --madeira-escura:#5C3A1A; --creme:#FFF8EE;
@@ -285,6 +288,9 @@
     </div>
   </div>
 </div>
+
+<!-- gatilho do AR Quick Look (iPhone) -->
+<a id="arQL" rel="ar" style="display:none"><img alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="></a>
 
 <!-- modo VR (WebXR — móveis fixados no ambiente) -->
 <div id="arOverlay">
@@ -1054,19 +1060,43 @@ function arConstruirMovel(THREE, m){
   return g;
 }
 
+/* roteador: Android com ARCore → WebXR (vários móveis) | iPhone → AR Quick Look nativo */
 async function abrirAR(){
-  if(!navigator.xr){
-    alert('Este navegador não tem AR de verdade (WebXR).\n\nFunciona no CHROME de celulares ANDROID compatíveis com ARCore.\niPhone não suporta — use o modo 📷 câmera normal.');
-    return;
-  }
-  let suporta = false;
-  try{ suporta = await navigator.xr.isSessionSupported('immersive-ar'); }catch(e){}
-  if(!suporta){
-    alert('Este aparelho não suporta AR imersivo.\n\nSe for Android: instale/atualize o "Google Play Services para AR" na Play Store e tente de novo.\nSe for iPhone: use o modo 📷 câmera normal.');
-    return;
-  }
+  let temWebXR = false;
+  if(navigator.xr){ try{ temWebXR = await navigator.xr.isSessionSupported('immersive-ar'); }catch(e){} }
+  if(temWebXR){ await abrirARAndroid(); return; }
+
+  const aTest = document.createElement('a');
+  const temQuickLook = aTest.relList && aTest.relList.supports && aTest.relList.supports('ar');
+  if(temQuickLook){ await abrirARiPhone(); return; }
+
+  alert('Este aparelho não tem AR de verdade.\n\nAndroid: instale/atualize o "Google Play Services para AR" na Play Store e use o Chrome.\niPhone/iPad: use o Safari.\n\nEnquanto isso, o modo 📷 câmera funciona em qualquer aparelho.');
+}
+
+/* iPhone: gera o móvel 3D com as medidas reais e abre no visualizador nativo da Apple */
+async function abrirARiPhone(){
+  const m = lerModuloForm();
+  if(m.L<=0||m.A<=0||m.P<=0){ alert('Preencha as medidas do módulo primeiro.'); return; }
   try{
-    arT = await import('https://unpkg.com/three@0.160.1/build/three.module.js');
+    const THREE = await import('three');
+    const {USDZExporter} = await import('three/addons/exporters/USDZExporter.js');
+    const scene = new THREE.Scene();
+    scene.add(arConstruirMovel(THREE, m));
+    const exporter = new USDZExporter();
+    const dados = await exporter.parse(scene);
+    const blob = new Blob([dados], {type:'model/vnd.usd+zip'});
+    const a = document.getElementById('arQL');
+    if(a.href) URL.revokeObjectURL(a.href.split('#')[0]);
+    a.href = URL.createObjectURL(blob) + '#allowsContentScaling=0'; // trava no tamanho REAL
+    a.click(); // abre o AR Quick Look
+  }catch(e){
+    alert('Não consegui gerar o modelo 3D — verifica a internet e tenta de novo.');
+  }
+}
+
+async function abrirARAndroid(){
+  try{
+    arT = await import('three');
   }catch(e){
     alert('Não consegui carregar o motor 3D — verifica a internet e tenta de novo.');
     return;
