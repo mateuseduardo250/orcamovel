@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Orçamóvel — Orçamento vivo pra marceneiro</title>
+<style>
+  :root{
+    --madeira:#8B5A2B; --madeira-escura:#5C3A1A; --creme:#FFF8EE;
+    --verde:#1E7D45; --verde-claro:#E6F4EC; --cinza:#6B6B6B;
+    --borda:#E5D9C8; --vermelho:#C0392B;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',Roboto,Arial,sans-serif;}
+  body{background:var(--creme); color:#2B2B2B; padding-bottom:150px;}
+
+  header{background:var(--madeira-escura); color:#fff; padding:14px 16px; position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:10px;}
+  header .logo{font-size:22px;}
+  header h1{font-size:19px; font-weight:700; letter-spacing:.3px;}
+  header small{opacity:.8; display:block; font-size:11px; font-weight:400;}
+
+  .tabs{display:flex; position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--borda); z-index:30;}
+  .tabs button{flex:1; padding:10px 4px 12px; border:none; background:none; font-size:11px; color:var(--cinza); cursor:pointer;}
+  .tabs button .ic{display:block; font-size:20px; margin-bottom:2px;}
+  .tabs button.active{color:var(--madeira-escura); font-weight:700;}
+
+  main{padding:16px; max-width:560px; margin:0 auto;}
+  section{display:none;} section.show{display:block;}
+  h2{font-size:17px; margin-bottom:12px; color:var(--madeira-escura);}
+  .card{background:#fff; border:1px solid var(--borda); border-radius:12px; padding:14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,.05);}
+  .muted{color:var(--cinza); font-size:12.5px;}
+
+  label{display:block; font-size:12.5px; font-weight:600; margin:10px 0 4px; color:#444;}
+  input,select{width:100%; padding:10px; border:1px solid var(--borda); border-radius:8px; font-size:15px; background:#fff;}
+  .row{display:flex; gap:8px;} .row>div{flex:1;}
+  .btn{display:block; width:100%; padding:13px; border:none; border-radius:10px; background:var(--madeira); color:#fff; font-size:15px; font-weight:700; cursor:pointer; margin-top:12px;}
+  .btn.verde{background:var(--verde);}
+  .btn.claro{background:#fff; color:var(--madeira-escura); border:2px solid var(--madeira);}
+  .btn.mini{width:auto; padding:7px 12px; font-size:13px; margin:0; display:inline-block;}
+  .btn.vermelho{background:var(--vermelho);}
+
+  /* barra de preço vivo */
+  #barraPreco{position:fixed; bottom:56px; left:0; right:0; background:var(--madeira-escura); color:#fff; padding:10px 16px; display:none; z-index:25; align-items:center; justify-content:space-between;}
+  #barraPreco.show{display:flex;}
+  #barraPreco .custo{font-size:12px; opacity:.85;}
+  #barraPreco .final{font-size:20px; font-weight:800;}
+  #barraPreco .olho{background:none; border:1px solid rgba(255,255,255,.4); color:#fff; border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer;}
+
+  .mat-item{display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--borda);}
+  .mat-item:last-child{border-bottom:none;}
+  .mat-item .nome{flex:1; font-size:14px; font-weight:600;}
+  .mat-item .un{font-size:11px; color:var(--cinza); display:block; font-weight:400;}
+  .mat-item input{width:92px; text-align:right;}
+
+  .mod-item{border:1px solid var(--borda); border-radius:10px; padding:10px 12px; margin-bottom:8px; background:#FDFBF7;}
+  .mod-item .titulo{font-weight:700; font-size:14px;}
+  .mod-item .det{font-size:12px; color:var(--cinza); margin-top:2px;}
+  .mod-item .preco{font-weight:700; color:var(--verde); font-size:14px; margin-top:4px;}
+
+  .proj-item{cursor:pointer;}
+  .proj-item .cliente{font-weight:700; font-size:15px;}
+  .proj-item .info{font-size:12.5px; color:var(--cinza); margin-top:2px;}
+  .proj-item .valor{color:var(--verde); font-weight:800; font-size:16px; margin-top:4px;}
+
+  .desenho{background:#FDFBF7; border:1px dashed var(--madeira); border-radius:8px; margin-top:10px; padding:8px; text-align:center;}
+  .badge{display:inline-block; background:var(--verde-claro); color:var(--verde); font-size:11px; font-weight:700; border-radius:20px; padding:3px 10px; margin-bottom:6px;}
+  .vazio{text-align:center; padding:30px 10px; color:var(--cinza); font-size:14px;}
+  .vazio .ic{font-size:40px; display:block; margin-bottom:8px;}
+
+  /* modo câmera ("holograma") */
+  #camView{display:none; position:fixed; inset:0; z-index:100; background:#000;}
+  #camView.show{display:block;}
+  #camVideo{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
+  #camCanvas{position:absolute; inset:0; z-index:101; touch-action:none; cursor:grab;}
+  #camTopo{position:absolute; top:0; left:0; right:0; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; background:linear-gradient(rgba(0,0,0,.65),transparent); z-index:102;}
+  #camPreco{color:#fff; font-size:22px; font-weight:800; text-shadow:0 1px 4px #000;}
+  #camBase{position:absolute; bottom:0; left:0; right:0; padding:14px 16px 22px; background:linear-gradient(transparent,rgba(0,0,0,.75)); z-index:102;}
+  #camBase label{color:#fff; font-size:12px; margin-top:0;}
+  #camBase input[type=range]{width:100%; padding:0;}
+  .cam-btn{background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.55); color:#fff; border-radius:10px; padding:9px 14px; font-size:14px; font-weight:700; cursor:pointer;}
+  #camEdit{position:absolute; top:64px; right:10px; z-index:103; background:rgba(0,0,0,.7); border-radius:12px; padding:10px 12px; display:none; max-width:240px;}
+  #camEdit.show{display:block;}
+  .ce-row{display:flex; align-items:center; gap:6px; color:#fff; font-size:13px; margin:7px 0;}
+  .ce-row .nome{flex:1; min-width:72px;}
+  .ce-row button{width:32px; height:32px; border-radius:8px; border:1px solid rgba(255,255,255,.5); background:rgba(255,255,255,.15); color:#fff; font-size:17px; cursor:pointer; padding:0;}
+  .ce-row b{min-width:36px; text-align:center; font-size:14px;}
+  .cv{display:flex; align-items:center; gap:5px; color:#fff; font-size:12px; margin:0; font-weight:400;}
+  .cv input{width:auto; padding:0; margin:0;}
+  #camMsg{position:absolute; top:44%; left:0; right:0; text-align:center; color:#fff; padding:20px; z-index:101; display:none; text-shadow:0 1px 4px #000;}
+
+  /* orçamento / impressão */
+  #orcDoc{background:#fff; border:1px solid var(--borda); border-radius:12px; padding:20px;}
+  #orcDoc h3{color:var(--madeira-escura); font-size:18px;}
+  #orcDoc .linha{display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--borda); font-size:14px;}
+  #orcDoc .total{font-size:20px; font-weight:800; color:var(--verde); text-align:right; margin-top:12px;}
+  #orcDoc .rodape{margin-top:16px; font-size:12px; color:var(--cinza); border-top:2px solid var(--madeira); padding-top:10px;}
+  @media print{
+    body *{visibility:hidden;} #orcDoc,#orcDoc *{visibility:visible;}
+    #orcDoc{position:absolute; top:0; left:0; width:100%; border:none;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">🔨</span>
+  <div>
+    <h1>Orçamóvel</h1>
+    <small>o orçamento nasce na frente do cliente</small>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============ PROJETOS ============ -->
+  <section id="tab-projetos" class="show">
+    <h2>Meus projetos</h2>
+    <div id="listaProjetos"></div>
+    <button class="btn" onclick="novoProjeto()">➕ Novo projeto</button>
+  </section>
+
+  <!-- ============ PROJETO ATUAL ============ -->
+  <section id="tab-projeto">
+    <div class="card">
+      <label>Nome do cliente / projeto</label>
+      <input id="pCliente" placeholder="Ex.: Cozinha da Dona Maria" oninput="salvarProjetoAtual()">
+    </div>
+
+    <h2>Módulos do móvel</h2>
+    <div id="listaModulos"></div>
+
+    <div class="card">
+      <span class="badge">ADICIONAR MÓDULO</span>
+      <label>Tipo</label>
+      <select id="mTipo" onchange="preencherPadrao()">
+        <option value="aereo">Armário aéreo</option>
+        <option value="base">Balcão / armário base</option>
+        <option value="guarda">Guarda-roupa</option>
+        <option value="gaveteiro">Gaveteiro</option>
+        <option value="estante">Estante / nicho</option>
+      </select>
+      <div class="row">
+        <div><label>Largura (cm)</label><input id="mL" type="number" value="120"></div>
+        <div><label>Altura (cm)</label><input id="mA" type="number" value="70"></div>
+        <div><label>Prof. (cm)</label><input id="mP" type="number" value="35"></div>
+      </div>
+      <div class="row">
+        <div><label>Portas</label><input id="mPortas" type="number" value="2" min="0"></div>
+        <div><label>Gavetas</label><input id="mGav" type="number" value="0" min="0"></div>
+        <div><label>Prateleiras</label><input id="mPrat" type="number" value="1" min="0"></div>
+      </div>
+      <div class="desenho" id="desenhoModulo"></div>
+      <button class="btn claro" onclick="abrirCamera()">📷 Ver no ambiente — "holograma"</button>
+      <button class="btn" onclick="addModulo()">➕ Adicionar ao projeto</button>
+    </div>
+
+    <button class="btn verde" onclick="verOrcamento()">📄 Gerar orçamento</button>
+    <button class="btn claro" onclick="mostrarTab('projetos')">← Voltar aos projetos</button>
+  </section>
+
+  <!-- ============ ORÇAMENTO ============ -->
+  <section id="tab-orcamento">
+    <h2>Orçamento</h2>
+    <div id="orcDoc"></div>
+    <button class="btn verde" onclick="enviarWhats()">📲 Enviar no WhatsApp</button>
+    <button class="btn claro" onclick="window.print()">🖨️ Imprimir / salvar PDF</button>
+    <button class="btn claro" onclick="mostrarTab('projeto')">← Voltar ao projeto</button>
+  </section>
+
+  <!-- ============ MATERIAIS ============ -->
+  <section id="tab-materiais">
+    <h2>Materiais e preços</h2>
+    <p class="muted" style="margin-bottom:10px;">Coloque aqui os preços da SUA madeireira. O app usa esses valores pra calcular tudo. Atualizou o preço na loja? Atualiza aqui.</p>
+    <div class="card" id="listaMateriais"></div>
+    <div class="card">
+      <span class="badge">ADICIONAR MATERIAL</span>
+      <label>Nome do material</label>
+      <input id="nmNome" placeholder="Ex.: Corrediça telescópica 45cm">
+      <label>Loja / madeireira</label>
+      <input id="nmLoja" placeholder="Ex.: Madeireira Central — Ipojuca">
+      <div class="row">
+        <div>
+          <label>Unidade</label>
+          <select id="nmUn">
+            <option>unidade</option><option>par</option><option>metro</option>
+            <option>chapa</option><option>cento</option><option>galão</option><option>kg</option>
+          </select>
+        </div>
+        <div><label>Preço R$</label><input id="nmPreco" type="number" step="0.5" placeholder="0,00"></div>
+      </div>
+      <button class="btn" onclick="addMaterial()">➕ Adicionar material</button>
+      <p class="muted" style="margin-top:8px;">A calculadora usa os itens básicos (chapas, fita, dobradiça, corrediça, puxador, parafuso). Os materiais que você adicionar viram sua tabela de preços por loja — pra comparar e não esquecer preço.</p>
+    </div>
+  </section>
+
+  <!-- ============ CONFIG ============ -->
+  <section id="tab-config">
+    <h2>Configurações</h2>
+    <div class="card">
+      <span class="badge">SUA MARGEM 💰</span>
+      <label>Margem de lucro sobre o material (%)</label>
+      <input id="cMargem" type="number" value="80" oninput="salvarConfig(); calcular();">
+      <p class="muted" style="margin-top:6px;">Ex.: material deu R$ 1.000 e margem 80% → preço final R$ 1.800. Só você vê isso — o cliente vê apenas o preço final.</p>
+      <label>Consumíveis por projeto (cola, lixa, parafuso avulso...) R$</label>
+      <input id="cConsumiveis" type="number" value="40" oninput="salvarConfig(); calcular();">
+      <label>Fator de perda de chapa (recortes/sobras)</label>
+      <select id="cPerda" onchange="salvarConfig(); calcular();">
+        <option value="1.15">15% — corte bem aproveitado</option>
+        <option value="1.2" selected>20% — padrão</option>
+        <option value="1.3">30% — móvel com muito recorte</option>
+      </select>
+    </div>
+    <div class="card">
+      <span class="badge">SEUS DADOS (saem no orçamento)</span>
+      <label>Seu nome / marcenaria</label>
+      <input id="cNome" placeholder="Ex.: Marcenaria do João" oninput="salvarConfig()">
+      <label>Seu WhatsApp</label>
+      <input id="cFone" placeholder="Ex.: 81 9 9999-9999" oninput="salvarConfig()">
+      <label>Validade do orçamento (dias)</label>
+      <input id="cValidade" type="number" value="10" oninput="salvarConfig()">
+    </div>
+    <div class="card">
+      <button class="btn vermelho" onclick="zerarTudo()">🗑️ Apagar todos os dados</button>
+    </div>
+  </section>
+
+</main>
+
+<!-- modo câmera ("holograma") -->
+<div id="camView">
+  <video id="camVideo" autoplay playsinline muted></video>
+  <canvas id="camCanvas"></canvas>
+  <div id="camMsg"></div>
+  <div id="camTopo">
+    <div id="camPreco">R$ 0</div>
+    <div style="display:flex; gap:8px;">
+      <button class="cam-btn" onclick="toggleCamEdit()">✏️ Montar</button>
+      <button class="cam-btn" onclick="fecharCamera()">✕</button>
+    </div>
+  </div>
+  <div id="camEdit">
+    <div class="ce-row"><span class="nome">Largura</span><button onclick="camAlt('mL',-10,20)">−</button><b id="ceL">120</b><button onclick="camAlt('mL',10,20)">+</button><span>cm</span></div>
+    <div class="ce-row"><span class="nome">Altura</span><button onclick="camAlt('mA',-10,20)">−</button><b id="ceA">70</b><button onclick="camAlt('mA',10,20)">+</button><span>cm</span></div>
+    <div class="ce-row"><span class="nome">Profund.</span><button onclick="camAlt('mP',-5,15)">−</button><b id="ceP">35</b><button onclick="camAlt('mP',5,15)">+</button><span>cm</span></div>
+    <div class="ce-row"><span class="nome">Portas</span><button onclick="camAlt('mPortas',-1,0)">−</button><b id="cePortas">2</b><button onclick="camAlt('mPortas',1,0)">+</button></div>
+    <div class="ce-row"><span class="nome">Gavetas</span><button onclick="camAlt('mGav',-1,0)">−</button><b id="ceGav">0</b><button onclick="camAlt('mGav',1,0)">+</button></div>
+    <div class="ce-row"><span class="nome">Prateleiras</span><button onclick="camAlt('mPrat',-1,0)">−</button><b id="cePrat">1</b><button onclick="camAlt('mPrat',1,0)">+</button></div>
+    <div style="border-top:1px solid rgba(255,255,255,.25); margin-top:8px; padding-top:8px;">
+      <div style="color:#fff; font-size:12px; margin-bottom:6px;">👁 Mostrar peças:</div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px 12px;">
+        <label class="cv"><input type="checkbox" class="camvis" checked onchange="camVisSet('portas',this.checked)">Portas</label>
+        <label class="cv"><input type="checkbox" class="camvis" checked onchange="camVisSet('gavetas',this.checked)">Gavetas</label>
+        <label class="cv"><input type="checkbox" class="camvis" checked onchange="camVisSet('prateleiras',this.checked)">Prateleiras</label>
+        <label class="cv"><input type="checkbox" class="camvis" checked onchange="camVisSet('fundo',this.checked)">Fundo</label>
+        <label class="cv"><input type="checkbox" class="camvis" checked onchange="camVisSet('tampo',this.checked)">Tampo</label>
+        <label class="cv"><input type="checkbox" class="camvis" checked onchange="camVisSet('base',this.checked)">Base</label>
+        <label class="cv"><input type="checkbox" class="camvis" checked onchange="camVisSet('laterais',this.checked)">Laterais</label>
+      </div>
+    </div>
+  </div>
+  <div id="camBase">
+    <label>👆 Toque na porta/gaveta = abre · 🖐 arraste = girar · ✊ segure = mover</label>
+    <input type="range" id="camScale" min="0.3" max="3" step="0.05" value="1" oninput="ajustarEscalaCam()">
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <button class="cam-btn" onclick="togglePortas()">🚪 Abrir/fechar</button>
+      <button class="cam-btn" style="flex:1" onclick="tirarFoto()">📸 Foto pro cliente</button>
+    </div>
+  </div>
+</div>
+
+<!-- barra de preço vivo -->
+<div id="barraPreco">
+  <div>
+    <div class="custo" id="bpCusto">Material: R$ 0</div>
+    <div class="final" id="bpFinal">R$ 0</div>
+  </div>
+  <button class="olho" id="bpOlho" onclick="toggleModoCliente()">👁 modo cliente</button>
+</div>
+
+<!-- navegação -->
+<nav class="tabs">
+  <button id="nav-projetos" class="active" onclick="mostrarTab('projetos')"><span class="ic">📁</span>Projetos</button>
+  <button id="nav-projeto" onclick="mostrarTab('projeto')"><span class="ic">🛠️</span>Montar</button>
+  <button id="nav-materiais" onclick="mostrarTab('materiais')"><span class="ic">🧾</span>Materiais</button>
+  <button id="nav-config" onclick="mostrarTab('config')"><span class="ic">⚙️</span>Config</button>
+</nav>
+
+<script>
+/* ================== ESTADO ================== */
+const MATERIAIS_PADRAO = [
+  {id:'chapa15',  nome:'Chapa MDF 15mm (2,75×1,85m)', un:'chapa',  preco:300},
+  {id:'chapa6',   nome:'Chapa MDF 6mm — fundo',        un:'chapa',  preco:180},
+  {id:'fita',     nome:'Fita de borda',                un:'metro',  preco:2.5},
+  {id:'dobradica',nome:'Dobradiça',                    un:'unidade',preco:8},
+  {id:'corredica',nome:'Corrediça',                    un:'par',    preco:25},
+  {id:'puxador',  nome:'Puxador',                      un:'unidade',preco:12},
+  {id:'parafuso', nome:'Parafusos',                    un:'cento',  preco:35},
+  {id:'cola',     nome:'Cola (galão)',                 un:'galão',  preco:50},
+];
+const TIPOS = {
+  aereo:   {nome:'Armário aéreo',        L:120, A:70,  P:35, portas:2, gav:0, prat:1},
+  base:    {nome:'Balcão / base',        L:150, A:90,  P:55, portas:2, gav:1, prat:1},
+  guarda:  {nome:'Guarda-roupa',         L:180, A:220, P:55, portas:3, gav:2, prat:3},
+  gaveteiro:{nome:'Gaveteiro',           L:60,  A:90,  P:50, portas:0, gav:4, prat:0},
+  estante: {nome:'Estante / nicho',      L:90,  A:180, P:30, portas:0, gav:0, prat:4},
+};
+const AREA_CHAPA = 2.75 * 1.85; // m²
+
+let db = JSON.parse(localStorage.getItem('orcamovel') || 'null') || {
+  materiais: MATERIAIS_PADRAO,
+  config: {margem:80, consumiveis:40, perda:1.2, nome:'', fone:'', validade:10},
+  projetos: [],
+};
+let projetoAtual = null;      // índice em db.projetos
+let modoCliente = false;
+
+function salvar(){ localStorage.setItem('orcamovel', JSON.stringify(db)); }
+function fmt(v){ return 'R$ ' + v.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function precoDe(id){ const m = db.materiais.find(x=>x.id===id); return m ? Number(m.preco)||0 : 0; }
+
+/* ================== CÁLCULO (o motor) ================== */
+function calcularModulo(m){
+  const L=m.L/100, A=m.A/100, P=m.P/100;
+  const portas=Number(m.portas)||0, gav=Number(m.gav)||0, prat=Number(m.prat)||0;
+
+  // áreas em MDF 15mm
+  let a15 = 2*(A*P) + 2*(L*P) + prat*(L*P);          // laterais + base/tampo + prateleiras
+  if(portas>0) a15 += L*A;                            // frentes (portas)
+  a15 += gav*( L*0.2 + 2*(P*0.15) + L*0.15 );        // frente + caixa da gaveta
+  // áreas em MDF 6mm
+  let a6 = L*A + gav*(L*P);                           // fundo do módulo + fundos de gaveta
+
+  const perda = Number(db.config.perda)||1.2;
+  const chapas15 = Math.ceil((a15*perda/AREA_CHAPA)*2)/2;  // arredonda p/ meia chapa
+  const chapas6  = Math.ceil((a6 *perda/AREA_CHAPA)*2)/2;
+
+  // fita de borda (bordas aparentes, estimativa)
+  let fita = 2*A + 2*L + prat*L + gav*2*(L+0.2);
+  if(portas>0) fita += portas * 2*(A + L/portas);
+
+  const dobr = portas * (m.A>160 ? 3 : 2);
+  const corr = gav;                       // pares
+  const pux  = portas + gav;
+  const parafCentos = 0.3;                // ~30 parafusos por módulo
+
+  const custo =
+    chapas15*precoDe('chapa15') + chapas6*precoDe('chapa6') +
+    fita*precoDe('fita') + dobr*precoDe('dobradica') +
+    corr*precoDe('corredica') + pux*precoDe('puxador') +
+    parafCentos*precoDe('parafuso');
+
+  return {chapas15, chapas6, fita:Math.round(fita*10)/10, dobr, corr, pux, custo};
+}
+
+function calcularProjeto(p){
+  let custo = 0;
+  const dets = p.modulos.map(m => { const d = calcularModulo(m); custo += d.custo; return d; });
+  custo += Number(db.config.consumiveis)||0;
+  const final = custo * (1 + (Number(db.config.margem)||0)/100);
+  return {custo, final, dets};
+}
+
+/* ================== NAVEGAÇÃO ================== */
+function mostrarTab(t){
+  document.querySelectorAll('section').forEach(s=>s.classList.remove('show'));
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+t).classList.add('show');
+  const nav = document.getElementById('nav-'+t); if(nav) nav.classList.add('active');
+  document.getElementById('barraPreco').classList.toggle('show', t==='projeto' && projetoAtual!==null);
+  if(t==='projetos') renderProjetos();
+  if(t==='materiais') renderMateriais();
+  if(t==='projeto'){
+    if(projetoAtual===null){ novoProjeto(); return; }
+    renderModulos();
+  }
+  calcular();
+}
+
+/* ================== PROJETOS ================== */
+function renderProjetos(){
+  const el = document.getElementById('listaProjetos');
+  if(db.projetos.length===0){
+    el.innerHTML = '<div class="vazio"><span class="ic">🪑</span>Nenhum projeto ainda.<br>Toque em <b>Novo projeto</b> e monte o primeiro móvel na frente do cliente.</div>';
+    return;
+  }
+  el.innerHTML = db.projetos.map((p,i)=>{
+    const c = calcularProjeto(p);
+    return `<div class="card proj-item" onclick="abrirProjeto(${i})">
+      <div class="cliente">${p.cliente || 'Projeto sem nome'}</div>
+      <div class="info">${p.modulos.length} módulo(s) — criado em ${p.data}</div>
+      <div class="valor">${fmt(c.final)}</div>
+      <button class="btn mini vermelho" style="margin-top:8px" onclick="event.stopPropagation(); excluirProjeto(${i})">excluir</button>
+    </div>`;
+  }).join('');
+}
+function novoProjeto(){
+  db.projetos.push({cliente:'', data:new Date().toLocaleDateString('pt-BR'), modulos:[]});
+  projetoAtual = db.projetos.length-1;
+  salvar();
+  document.getElementById('pCliente').value = '';
+  mostrarTab('projeto');
+}
+function abrirProjeto(i){
+  projetoAtual = i;
+  document.getElementById('pCliente').value = db.projetos[i].cliente;
+  mostrarTab('projeto');
+}
+function excluirProjeto(i){
+  if(!confirm('Excluir este projeto?')) return;
+  db.projetos.splice(i,1); projetoAtual=null; salvar(); renderProjetos();
+}
+function salvarProjetoAtual(){
+  if(projetoAtual===null) return;
+  db.projetos[projetoAtual].cliente = document.getElementById('pCliente').value;
+  salvar();
+}
+
+/* ================== MÓDULOS ================== */
+function preencherPadrao(){
+  const t = TIPOS[document.getElementById('mTipo').value];
+  document.getElementById('mL').value = t.L;
+  document.getElementById('mA').value = t.A;
+  document.getElementById('mP').value = t.P;
+  document.getElementById('mPortas').value = t.portas;
+  document.getElementById('mGav').value = t.gav;
+  document.getElementById('mPrat').value = t.prat;
+  desenhar();
+}
+function lerModuloForm(){
+  return {
+    tipo: document.getElementById('mTipo').value,
+    L:Number(document.getElementById('mL').value)||0,
+    A:Number(document.getElementById('mA').value)||0,
+    P:Number(document.getElementById('mP').value)||0,
+    portas:Number(document.getElementById('mPortas').value)||0,
+    gav:Number(document.getElementById('mGav').value)||0,
+    prat:Number(document.getElementById('mPrat').value)||0,
+  };
+}
+function addModulo(){
+  if(projetoAtual===null) novoProjeto();
+  const m = lerModuloForm();
+  if(m.L<=0||m.A<=0||m.P<=0){ alert('Preencha as medidas do módulo.'); return; }
+  db.projetos[projetoAtual].modulos.push(m);
+  salvar(); renderModulos(); calcular();
+}
+function removerModulo(i){
+  db.projetos[projetoAtual].modulos.splice(i,1);
+  salvar(); renderModulos(); calcular();
+}
+function renderModulos(){
+  const el = document.getElementById('listaModulos');
+  if(projetoAtual===null || db.projetos[projetoAtual].modulos.length===0){
+    el.innerHTML = '<p class="muted" style="margin-bottom:10px;">Nenhum módulo ainda — adicione abaixo. 👇</p>';
+    return;
+  }
+  el.innerHTML = db.projetos[projetoAtual].modulos.map((m,i)=>{
+    const d = calcularModulo(m);
+    return `<div class="mod-item">
+      <div class="titulo">${TIPOS[m.tipo].nome} — ${m.L}×${m.A}×${m.P} cm</div>
+      <div class="det">${m.portas} porta(s) · ${m.gav} gaveta(s) · ${m.prat} prateleira(s) · ${d.chapas15} chapa(s) 15mm · ${d.fita}m de fita</div>
+      <div class="preco">${modoCliente ? '' : 'material: '+fmt(d.custo)}</div>
+      <button class="btn mini vermelho" onclick="removerModulo(${i})">remover</button>
+    </div>`;
+  }).join('');
+}
+
+/* desenho esquemático do módulo no formulário */
+function desenhar(){
+  const m = lerModuloForm();
+  const maxW=200, maxH=130;
+  const esc = Math.min(maxW/m.L, maxH/m.A) || 1;
+  const w = Math.max(m.L*esc,40), h = Math.max(m.A*esc,30);
+  let dentro = '';
+  // prateleiras
+  for(let i=1;i<=m.prat;i++){
+    const y = h/(m.prat+1)*i;
+    dentro += `<line x1="2" y1="${y}" x2="${w-2}" y2="${y}" stroke="#8B5A2B" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+  }
+  // portas
+  for(let i=1;i<m.portas;i++){
+    const x = w/m.portas*i;
+    dentro += `<line x1="${x}" y1="2" x2="${x}" y2="${h-2}" stroke="#5C3A1A" stroke-width="1.5"/>`;
+  }
+  if(m.portas>0) dentro += `<circle cx="${w*0.12}" cy="${h/2}" r="2.5" fill="#5C3A1A"/>`;
+  // gavetas (faixa inferior)
+  for(let i=0;i<m.gav;i++){
+    const gh = Math.min(14, h/6), y = h - (i+1)*gh - 2;
+    dentro += `<rect x="3" y="${y}" width="${w-6}" height="${gh-2}" fill="none" stroke="#1E7D45" stroke-width="1.2"/>
+               <line x1="${w/2-6}" y1="${y+gh/2-1}" x2="${w/2+6}" y2="${y+gh/2-1}" stroke="#1E7D45" stroke-width="1.5"/>`;
+  }
+  document.getElementById('desenhoModulo').innerHTML =
+    `<svg width="${w+20}" height="${h+26}" style="max-width:100%">
+       <rect x="2" y="2" width="${w-4}" height="${h-4}" fill="#F5E9D6" stroke="#5C3A1A" stroke-width="2" rx="3"/>
+       ${dentro}
+       <text x="${w/2}" y="${h+18}" text-anchor="middle" font-size="11" fill="#6B6B6B">${m.L}cm × ${m.A}cm × ${m.P}cm</text>
+     </svg>`;
+}
+['mL','mA','mP','mPortas','mGav','mPrat'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', desenhar);
+});
+
+/* ================== PREÇO VIVO ================== */
+function calcular(){
+  if(projetoAtual===null){ return; }
+  const c = calcularProjeto(db.projetos[projetoAtual]);
+  document.getElementById('bpCusto').textContent = modoCliente ? ' ' : 'Material: '+fmt(c.custo)+'  |  margem '+db.config.margem+'%';
+  document.getElementById('bpFinal').textContent = fmt(c.final);
+}
+function toggleModoCliente(){
+  modoCliente = !modoCliente;
+  document.getElementById('bpOlho').textContent = modoCliente ? '🙈 mostrar custo' : '👁 modo cliente';
+  renderModulos(); calcular();
+}
+
+/* ================== MATERIAIS ================== */
+function renderMateriais(){
+  document.getElementById('listaMateriais').innerHTML = db.materiais.map((m,i)=>`
+    <div class="mat-item">
+      <div class="nome">${m.nome}<span class="un">por ${m.un}${m.loja ? ' · 🏪 '+m.loja : ''}</span></div>
+      R$ <input type="number" step="0.5" value="${m.preco}" onchange="db.materiais[${i}].preco=Number(this.value)||0; salvar(); calcular();">
+      ${m.custom ? `<button class="btn mini vermelho" onclick="removerMaterial(${i})">✕</button>` : ''}
+    </div>`).join('');
+}
+function addMaterial(){
+  const nome = document.getElementById('nmNome').value.trim();
+  const preco = Number(document.getElementById('nmPreco').value)||0;
+  if(!nome || preco<=0){ alert('Preencha pelo menos o nome e o preço.'); return; }
+  db.materiais.push({
+    id: 'mat'+Date.now(),
+    nome,
+    un: document.getElementById('nmUn').value,
+    preco,
+    loja: document.getElementById('nmLoja').value.trim(),
+    custom: true,
+  });
+  salvar(); renderMateriais();
+  document.getElementById('nmNome').value = '';
+  document.getElementById('nmLoja').value = '';
+  document.getElementById('nmPreco').value = '';
+}
+function removerMaterial(i){
+  if(!confirm('Remover este material?')) return;
+  db.materiais.splice(i,1); salvar(); renderMateriais();
+}
+
+/* ================== CONFIG ================== */
+function salvarConfig(){
+  db.config.margem      = Number(document.getElementById('cMargem').value)||0;
+  db.config.consumiveis = Number(document.getElementById('cConsumiveis').value)||0;
+  db.config.perda       = Number(document.getElementById('cPerda').value)||1.2;
+  db.config.nome        = document.getElementById('cNome').value;
+  db.config.fone        = document.getElementById('cFone').value;
+  db.config.validade    = Number(document.getElementById('cValidade').value)||10;
+  salvar();
+}
+function carregarConfig(){
+  document.getElementById('cMargem').value      = db.config.margem;
+  document.getElementById('cConsumiveis').value = db.config.consumiveis;
+  document.getElementById('cPerda').value       = db.config.perda;
+  document.getElementById('cNome').value        = db.config.nome;
+  document.getElementById('cFone').value        = db.config.fone;
+  document.getElementById('cValidade').value    = db.config.validade;
+}
+function zerarTudo(){
+  if(!confirm('Apagar TODOS os projetos, materiais e configurações?')) return;
+  localStorage.removeItem('orcamovel'); location.reload();
+}
+
+/* ================== ORÇAMENTO ================== */
+function verOrcamento(){
+  if(projetoAtual===null || db.projetos[projetoAtual].modulos.length===0){
+    alert('Adicione pelo menos um módulo primeiro.'); return;
+  }
+  const p = db.projetos[projetoAtual];
+  const c = calcularProjeto(p);
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  document.getElementById('orcDoc').innerHTML = `
+    <h3>🔨 ${db.config.nome || 'Orçamento de marcenaria'}</h3>
+    <p class="muted">${hoje} · válido por ${db.config.validade} dias</p>
+    <p style="margin:10px 0 4px; font-weight:700;">Cliente: ${p.cliente || '—'}</p>
+    ${p.modulos.map((m,i)=>`
+      <div class="linha">
+        <span>${TIPOS[m.tipo].nome}<br><small class="muted">${m.L}×${m.A}×${m.P} cm · ${m.portas} porta(s) · ${m.gav} gaveta(s) · ${m.prat} prateleira(s)</small></span>
+      </div>`).join('')}
+    <div class="linha"><span>Material, ferragens e acabamento</span><span>incluído</span></div>
+    <div class="linha"><span>Mão de obra especializada</span><span>incluída</span></div>
+    <div class="total">Total: ${fmt(c.final)}</div>
+    <div class="rodape">
+      ${db.config.nome ? db.config.nome+' · ' : ''}${db.config.fone ? 'WhatsApp: '+db.config.fone : ''}<br>
+      Móvel sob medida, feito à mão. Orçamento gerado com Orçamóvel.
+    </div>`;
+  mostrarTab('orcamento');
+}
+function enviarWhats(){
+  const p = db.projetos[projetoAtual];
+  const c = calcularProjeto(p);
+  const txt =
+`🔨 *Orçamento — ${db.config.nome || 'Marcenaria'}*
+Cliente: ${p.cliente || '—'}
+
+${p.modulos.map(m=>`▪ ${TIPOS[m.tipo].nome} ${m.L}×${m.A}×${m.P}cm (${m.portas} porta(s), ${m.gav} gaveta(s), ${m.prat} prateleira(s))`).join('\n')}
+
+Material, ferragens e mão de obra incluídos.
+*Total: ${fmt(c.final)}*
+Válido por ${db.config.validade} dias.
+${db.config.fone ? '\nWhatsApp: '+db.config.fone : ''}`;
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+}
+
+/* ================== MODO CÂMERA — HOLOGRAMA 3D ================== */
+let camStream = null, camDrag = null, camHoldTimer = null;
+let cam3d = {x:0, y:0, s:1, rot:0.5, tilt:-0.1};
+let camVis = {portas:true, gavetas:true, prateleiras:true, fundo:true, tampo:true, base:true, laterais:true};
+let camAnim = {portas:{}, gavetas:{}}, camAnimTarget = {portas:{}, gavetas:{}}, camAnimando = false;
+let camFaces = [];
+const camCv = document.getElementById('camCanvas');
+
+/* projeção 3D em perspectiva (rotação Y + leve inclinação X) */
+function projetar(x, y, z, s, cx, cy){
+  const cos = Math.cos(cam3d.rot), sin = Math.sin(cam3d.rot);
+  const X = (x*cos + z*sin) * s;
+  const Zr = (-x*sin + z*cos) * s;
+  const tilt = cam3d.tilt, cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+  const Y = (y*s)*cosT - Zr*sinT;
+  const Z = (y*s)*sinT + Zr*cosT;
+  const d = 1300, f = d/(d+Z);
+  return {x: cx + X*f, y: cy + Y*f, z: Z, f};
+}
+
+/* cores por face (frente mais clara, lados mais escuros) */
+const CORES = {
+  ext:{frente:'#C89B69', tras:'#8a6236', lado:'#9A6F3F', topo:'#C9A26B', base:'#7d5a33'},
+  int:{frente:'#D9B181', tras:'#a5794a', lado:'#b08850', topo:'#DDB98A', base:'#96703f'},
+  escuro:{frente:'#3d2810', tras:'#3d2810', lado:'#3d2810', topo:'#3d2810', base:'#3d2810'},
+};
+
+/* gera as 6 faces de uma tábua/caixa 3D */
+function boxFaces(x1,x2,y1,y2,z1,z2,cor){
+  const P = [[x1,y1,z1],[x2,y1,z1],[x2,y2,z1],[x1,y2,z1],[x1,y1,z2],[x2,y1,z2],[x2,y2,z2],[x1,y2,z2]];
+  return [
+    {i:[0,1,2,3], c:cor.frente}, {i:[5,4,7,6], c:cor.tras},
+    {i:[4,0,3,7], c:cor.lado},   {i:[1,5,6,2], c:cor.lado},
+    {i:[4,5,1,0], c:cor.topo},   {i:[3,2,6,7], c:cor.base},
+  ].map(f=>({pts:f.i.map(ix=>P[ix]), c:f.c}));
+}
+
+function desenhaMovel3D(ctx, W, H){
+  const m = lerModuloForm();
+  const s = (Math.min(W,H)*0.55/Math.max(m.L, m.A)) * cam3d.s;
+  const cx = W/2 + cam3d.x, cy = H/2 + cam3d.y;
+  const hw = m.L/2, hh = m.A/2, hd = m.P/2;
+  const t = 2.5, tf = 1.5; // espessura das tábuas / do fundo
+
+  let faces = [];
+  const add = (x1,x2,y1,y2,z1,z2,cor,part,transf)=>{
+    let fs = boxFaces(x1,x2,y1,y2,z1,z2,cor);
+    if(transf) fs.forEach(f=> f.pts = f.pts.map(transf));
+    if(part) fs.forEach(f=> f.part = part);
+    faces.push(...fs);
+  };
+
+  if(camVis.laterais){
+    add(-hw, -hw+t, -hh, hh, -hd, hd, CORES.ext);      // lateral esquerda
+    add( hw-t, hw,  -hh, hh, -hd, hd, CORES.ext);      // lateral direita
+  }
+  if(camVis.tampo) add(-hw+t, hw-t, -hh, -hh+t, -hd, hd, CORES.ext);
+  if(camVis.base)  add(-hw+t, hw-t,  hh-t, hh,  -hd, hd, CORES.ext);
+  if(camVis.fundo) add(-hw, hw, -hh, hh, hd-tf, hd, CORES.int);
+
+  if(camVis.prateleiras) for(let i=1;i<=m.prat;i++){   // prateleiras (tábuas reais)
+    const y = -hh + (2*hh)*i/(m.prat+1);
+    add(-hw+t, hw-t, y, y+t, -hd+1, hd-tf, CORES.int);
+  }
+
+  if(camVis.gavetas){                                  // gavetas: toque = desliza pra fora
+    const gh = Math.min(25, (2*hh)/6);
+    for(let i=0;i<m.gav;i++){
+      const yb = hh - t - i*gh, yt = yb - gh + 2;
+      const off = (camAnim.gavetas[i]||0) * Math.min(35, m.P*0.6);
+      const mov = p=>[p[0], p[1], p[2]-off];
+      const part = {tipo:'gaveta', idx:i};
+      add(-hw+t+1, hw-t-1, yt, yb, -hd, -hd + Math.min(30, m.P*0.8), CORES.ext, part, mov);
+      add(-6, 6, (yt+yb)/2-1, (yt+yb)/2+1, -hd-1.5, -hd, CORES.escuro, part, mov); // puxador
+    }
+  }
+
+  if(camVis.portas && m.portas>0){                     // portas: toque = gira na dobradiça
+    for(let i=0;i<m.portas;i++){
+      const x1 = -hw + (2*hw)*i/m.portas + 0.6;
+      const x2 = -hw + (2*hw)*(i+1)/m.portas - 0.6;
+      const hingeEsq = (i%2===0);
+      const hx = hingeEsq ? x1 : x2, zp = -hd - t/2;
+      const a = (hingeEsq ? -1.9 : 1.9) * (camAnim.portas[i]||0);
+      const gira = p=>{
+        const dx = p[0]-hx, dz = p[2]-zp;
+        return [hx + dx*Math.cos(a) - dz*Math.sin(a), p[1], zp + dx*Math.sin(a) + dz*Math.cos(a)];
+      };
+      const part = {tipo:'porta', idx:i};
+      add(x1, x2, -hh+0.6, hh-0.6, -hd-t, -hd, CORES.ext, part, gira);
+      const frac = hingeEsq ? 0.88 : 0.12;
+      const px = x1 + (x2-x1)*frac;
+      add(px-2, px+2, -2, 2, -hd-t-1.5, -hd-t, CORES.escuro, part, gira); // puxador
+    }
+  }
+
+  // projeta tudo e pinta do fundo pra frente
+  faces.forEach(f=>{
+    f.p = f.pts.map(p=>projetar(p[0],p[1],p[2],s,cx,cy));
+    f.z = f.p.reduce((a,q)=>a+q.z,0)/f.p.length;
+  });
+  faces.sort((a,b)=>b.z-a.z);
+  camFaces = faces; // guarda pro toque (abrir porta/gaveta)
+
+  ctx.save();
+  ctx.globalAlpha = 0.95;
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 20;
+  faces.forEach((f,idx)=>{
+    ctx.beginPath();
+    f.p.forEach((q,i)=> i ? ctx.lineTo(q.x,q.y) : ctx.moveTo(q.x,q.y));
+    ctx.closePath();
+    ctx.fillStyle = f.c;
+    ctx.fill();
+    if(idx===0) ctx.shadowBlur = 0; // sombra só na silhueta
+    ctx.strokeStyle = 'rgba(61,40,16,.8)'; ctx.lineWidth = 1.4;
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+function renderCam(){
+  const W = camCv.width = window.innerWidth;
+  const H = camCv.height = window.innerHeight;
+  desenhaMovel3D(camCv.getContext('2d'), W, H);
+}
+window.addEventListener('resize', ()=>{
+  if(document.getElementById('camView').classList.contains('show')) renderCam();
+});
+
+async function abrirCamera(){
+  const m = lerModuloForm();
+  if(m.L<=0||m.A<=0){ alert('Preencha as medidas do módulo primeiro.'); return; }
+  cam3d = {x:0, y:0, s:1, rot:0.5, tilt:-0.1};
+  camVis = {portas:true, gavetas:true, prateleiras:true, fundo:true, tampo:true, base:true, laterais:true};
+  camAnim = {portas:{}, gavetas:{}}; camAnimTarget = {portas:{}, gavetas:{}};
+  document.querySelectorAll('.camvis').forEach(c=> c.checked = true);
+  document.getElementById('camScale').value = 1;
+  atualizarPrecoCam();
+  renderCamEdit();
+  document.getElementById('camView').classList.add('show');
+  renderCam();
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}, audio:false});
+    document.getElementById('camVideo').srcObject = camStream;
+    document.getElementById('camMsg').style.display = 'none';
+  }catch(e){
+    document.getElementById('camMsg').style.display = 'block';
+    document.getElementById('camMsg').innerHTML = '⚠️ Sem acesso à câmera.<br><small>Dê permissão de câmera ao navegador. (No computador dá pra testar girando e arrastando o móvel mesmo assim.)</small>';
+  }
+}
+function fecharCamera(){
+  if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream = null; }
+  document.getElementById('camVideo').srcObject = null;
+  document.getElementById('camView').classList.remove('show');
+}
+function ajustarEscalaCam(){ cam3d.s = Number(document.getElementById('camScale').value)||1; renderCam(); }
+
+/* mostrar/ocultar peças */
+function camVisSet(k, v){ camVis[k] = v; renderCam(); }
+
+/* botão: abre/fecha TODAS as portas de uma vez (animado) */
+function togglePortas(){
+  const m = lerModuloForm();
+  let algumaFechada = false;
+  for(let i=0;i<m.portas;i++) if(!camAnimTarget.portas[i]) algumaFechada = true;
+  for(let i=0;i<m.portas;i++) camAnimTarget.portas[i] = algumaFechada ? 1 : 0;
+  iniciarAnim();
+}
+
+/* animação suave (porta girando / gaveta deslizando) */
+function iniciarAnim(){
+  if(!camAnimando){ camAnimando = true; requestAnimationFrame(passoAnim); }
+}
+function passoAnim(){
+  let continua = false;
+  ['portas','gavetas'].forEach(k=>{
+    const cur = camAnim[k], tgt = camAnimTarget[k];
+    Object.keys(tgt).forEach(i=>{
+      const c = cur[i]||0, alvo = tgt[i]||0;
+      let n = c + (alvo-c)*0.18;
+      if(Math.abs(alvo-n) < 0.01) n = alvo;
+      cur[i] = n;
+      if(n !== alvo) continua = true;
+    });
+  });
+  renderCam();
+  if(continua) requestAnimationFrame(passoAnim); else camAnimando = false;
+}
+
+/* toque numa porta/gaveta = abre/fecha aquela peça */
+function dentroPoly(px, py, pts){
+  let dentro = false;
+  for(let i=0, j=pts.length-1; i<pts.length; j=i++){
+    const xi=pts[i].x, yi=pts[i].y, xj=pts[j].x, yj=pts[j].y;
+    if(((yi>py)!==(yj>py)) && (px < (xj-xi)*(py-yi)/(yj-yi)+xi)) dentro = true;
+  }
+  return dentro;
+}
+function areaPoly(pts){
+  let a = 0;
+  for(let i=0, j=pts.length-1; i<pts.length; j=i++){
+    a += pts[j].x*pts[i].y - pts[i].x*pts[j].y;
+  }
+  return Math.abs(a/2);
+}
+function tocarMovel(px, py){
+  for(let i=camFaces.length-1; i>=0; i--){ // da frente pro fundo
+    const f = camFaces[i];
+    if(areaPoly(f.p) < 80) continue;             // ignora faces de quina (quase invisíveis)
+    if(!dentroPoly(px, py, f.p)) continue;
+    if(f.part){                                  // a peça que você está VENDO nesse ponto
+      const alvo = camAnimTarget[f.part.tipo+'s'];
+      alvo[f.part.idx] = alvo[f.part.idx] ? 0 : 1;
+      if(navigator.vibrate) navigator.vibrate(15);
+      iniciarAnim();
+    }
+    return; // se a face da frente é carcaça (prateleira/fundo/lateral), não faz nada
+  }
+}
+
+/* painel "Montar" dentro da câmera */
+function toggleCamEdit(){ document.getElementById('camEdit').classList.toggle('show'); }
+function atualizarPrecoCam(){
+  const m = lerModuloForm();
+  const d = calcularModulo(m);
+  const final = (d.custo + (Number(db.config.consumiveis)||0)) * (1 + (Number(db.config.margem)||0)/100);
+  document.getElementById('camPreco').textContent = fmt(final);
+}
+function renderCamEdit(){
+  const m = lerModuloForm();
+  document.getElementById('ceL').textContent = m.L;
+  document.getElementById('ceA').textContent = m.A;
+  document.getElementById('ceP').textContent = m.P;
+  document.getElementById('cePortas').textContent = m.portas;
+  document.getElementById('ceGav').textContent = m.gav;
+  document.getElementById('cePrat').textContent = m.prat;
+}
+function camAlt(id, delta, min){
+  const el = document.getElementById(id);
+  el.value = Math.max(min, (Number(el.value)||0) + delta);
+  desenhar();          // atualiza o desenho do formulário também
+  renderCamEdit();
+  atualizarPrecoCam(); // preço vivo na câmera
+  renderCam();         // redesenha o 3D
+}
+
+/* arrastar = girar | segurar meio segundo e arrastar = mover */
+camCv.addEventListener('pointerdown', e=>{
+  camDrag = {x:e.clientX, y:e.clientY, rot:cam3d.rot, tilt:cam3d.tilt, ox:cam3d.x, oy:cam3d.y, mode:'pending'};
+  camCv.setPointerCapture(e.pointerId);
+  camHoldTimer = setTimeout(()=>{
+    if(camDrag && camDrag.mode==='pending'){
+      camDrag.mode = 'mover';
+      if(navigator.vibrate) navigator.vibrate(40); // avisa que "pegou" o móvel
+    }
+  }, 350);
+});
+camCv.addEventListener('pointermove', e=>{
+  if(!camDrag) return;
+  const dx = e.clientX - camDrag.x, dy = e.clientY - camDrag.y;
+  if(camDrag.mode==='pending' && Math.hypot(dx,dy) > 10){
+    camDrag.mode = 'girar';
+    clearTimeout(camHoldTimer);
+  }
+  if(camDrag.mode==='girar'){
+    cam3d.rot  = camDrag.rot + dx*0.008;
+    cam3d.tilt = Math.max(-0.9, Math.min(0.9, camDrag.tilt + dy*0.006));
+    renderCam();
+  } else if(camDrag.mode==='mover'){
+    cam3d.x = camDrag.ox + dx;
+    cam3d.y = camDrag.oy + dy;
+    renderCam();
+  }
+});
+const camSolta = ()=>{ camDrag = null; clearTimeout(camHoldTimer); };
+camCv.addEventListener('pointerup', e=>{
+  if(camDrag && camDrag.mode==='pending') tocarMovel(e.clientX, e.clientY); // toque rápido = abrir peça
+  camSolta();
+});
+camCv.addEventListener('pointercancel', camSolta);
+
+function tirarFoto(){
+  const video = document.getElementById('camVideo');
+  const W = window.innerWidth, H = window.innerHeight;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#111'; ctx.fillRect(0,0,W,H);
+  if(video.videoWidth){
+    const sc = Math.max(W/video.videoWidth, H/video.videoHeight);
+    const dw = video.videoWidth*sc, dh = video.videoHeight*sc;
+    ctx.drawImage(video, (W-dw)/2, (H-dh)/2, dw, dh);
+  }
+  desenhaMovel3D(ctx, W, H); // mesmo desenho 3D da tela, direto na foto
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 28px sans-serif';
+  ctx.shadowColor = '#000'; ctx.shadowBlur = 8;
+  ctx.fillText(document.getElementById('camPreco').textContent, 16, 44);
+  ctx.shadowBlur = 0;
+  const a = document.createElement('a');
+  a.download = 'movel-no-ambiente.png';
+  a.href = cv.toDataURL('image/png');
+  a.click();
+}
+
+/* ================== INICIALIZAÇÃO ================== */
+carregarConfig();
+renderProjetos();
+renderMateriais();
+desenhar();
+</script>
+</body>
+</html>
