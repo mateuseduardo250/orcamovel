@@ -257,6 +257,13 @@
         <label class="cv"><input type="checkbox" class="camvis" checked onchange="camVisSet('laterais',this.checked)">Laterais</label>
       </div>
     </div>
+    <div style="border-top:1px solid rgba(255,255,255,.25); margin-top:8px; padding-top:8px;">
+      <div style="color:#fff; font-size:12px; margin-bottom:6px;">🔧 Construção:</div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px 12px;">
+        <label class="cv"><input type="checkbox" class="camconstr" onchange="camConstrSet('tampo',this.checked)">Tampo passante</label>
+        <label class="cv"><input type="checkbox" class="camconstr" onchange="camConstrSet('base',this.checked)">Base passante</label>
+      </div>
+    </div>
   </div>
   <div id="camBase">
     <label>👆 Toque na porta/gaveta = abre · 🖐 arraste = girar · ✊ segure = mover</label>
@@ -612,6 +619,7 @@ ${db.config.fone ? '\nWhatsApp: '+db.config.fone : ''}`;
 let camStream = null, camDrag = null, camHoldTimer = null;
 let cam3d = {x:0, y:0, s:1, rot:0.5, tilt:-0.1};
 let camVis = {portas:true, gavetas:true, prateleiras:true, fundo:true, tampo:true, base:true, laterais:true};
+let camConstr = {tampo:false, base:false}; // construção: tampo/base passante
 let camAnim = {portas:{}, gavetas:{}}, camAnimTarget = {portas:{}, gavetas:{}}, camAnimando = false;
 let camFaces = [];
 const camCv = document.getElementById('camCanvas');
@@ -661,12 +669,17 @@ function desenhaMovel3D(ctx, W, H){
     faces.push(...fs);
   };
 
+  // construção: passante = atravessa de fora a fora; a outra peça encaixa entre
+  const yLat1 = -hh + (camConstr.tampo ? t : 0);
+  const yLat2 =  hh - (camConstr.base  ? t : 0);
   if(camVis.laterais){
-    add(-hw, -hw+t, -hh, hh, -hd, hd, CORES.ext);      // lateral esquerda
-    add( hw-t, hw,  -hh, hh, -hd, hd, CORES.ext);      // lateral direita
+    add(-hw, -hw+t, yLat1, yLat2, -hd, hd, CORES.ext); // lateral esquerda
+    add( hw-t, hw,  yLat1, yLat2, -hd, hd, CORES.ext); // lateral direita
   }
-  if(camVis.tampo) add(-hw+t, hw-t, -hh, -hh+t, -hd, hd, CORES.ext);
-  if(camVis.base)  add(-hw+t, hw-t,  hh-t, hh,  -hd, hd, CORES.ext);
+  const xT1 = camConstr.tampo ? -hw : -hw+t, xT2 = camConstr.tampo ? hw : hw-t;
+  const xB1 = camConstr.base  ? -hw : -hw+t, xB2 = camConstr.base  ? hw : hw-t;
+  if(camVis.tampo) add(xT1, xT2, -hh, -hh+t, -hd, hd, CORES.ext);
+  if(camVis.base)  add(xB1, xB2,  hh-t, hh,  -hd, hd, CORES.ext);
   if(camVis.fundo) add(-hw, hw, -hh, hh, hd-tf, hd, CORES.int);
 
   if(camVis.prateleiras) for(let i=1;i<=m.prat;i++){   // prateleiras (tábuas reais)
@@ -744,8 +757,10 @@ async function abrirCamera(){
   if(m.L<=0||m.A<=0){ alert('Preencha as medidas do módulo primeiro.'); return; }
   cam3d = {x:0, y:0, s:1, rot:0.5, tilt:-0.1, norm:Math.max(m.L, m.A)};
   camVis = {portas:true, gavetas:true, prateleiras:true, fundo:true, tampo:true, base:true, laterais:true};
+  camConstr = {tampo:false, base:false};
   camAnim = {portas:{}, gavetas:{}}; camAnimTarget = {portas:{}, gavetas:{}};
   document.querySelectorAll('.camvis').forEach(c=> c.checked = true);
+  document.querySelectorAll('.camconstr').forEach(c=> c.checked = false);
   document.getElementById('camScale').value = 1;
   atualizarPrecoCam();
   renderCamEdit();
@@ -769,6 +784,9 @@ function ajustarEscalaCam(){ cam3d.s = Number(document.getElementById('camScale'
 
 /* mostrar/ocultar peças */
 function camVisSet(k, v){ camVis[k] = v; renderCam(); }
+
+/* construção: tampo/base passante */
+function camConstrSet(k, v){ camConstr[k] = v; renderCam(); }
 
 /* botão: abre/fecha TODAS as portas de uma vez (animado) */
 function togglePortas(){
