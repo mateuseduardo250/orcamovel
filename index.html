@@ -260,8 +260,9 @@
     <div style="border-top:1px solid rgba(255,255,255,.25); margin-top:8px; padding-top:8px;">
       <div style="color:#fff; font-size:12px; margin-bottom:6px;">🔧 Construção:</div>
       <div style="display:flex; flex-wrap:wrap; gap:8px 12px;">
-        <label class="cv"><input type="checkbox" class="camconstr" onchange="camConstrSet('tampo',this.checked)">Tampo passante</label>
-        <label class="cv"><input type="checkbox" class="camconstr" onchange="camConstrSet('base',this.checked)">Base passante</label>
+        <label class="cv"><input type="checkbox" id="ccLat" checked onchange="camConstrLat(this.checked)">Laterais passantes</label>
+        <label class="cv"><input type="checkbox" id="ccTampo" onchange="camConstrSet('tampo',this.checked)">Tampo passante</label>
+        <label class="cv"><input type="checkbox" id="ccBase" onchange="camConstrSet('base',this.checked)">Base passante</label>
       </div>
     </div>
   </div>
@@ -760,7 +761,7 @@ async function abrirCamera(){
   camConstr = {tampo:false, base:false};
   camAnim = {portas:{}, gavetas:{}}; camAnimTarget = {portas:{}, gavetas:{}};
   document.querySelectorAll('.camvis').forEach(c=> c.checked = true);
-  document.querySelectorAll('.camconstr').forEach(c=> c.checked = false);
+  syncConstrUI();
   document.getElementById('camScale').value = 1;
   atualizarPrecoCam();
   renderCamEdit();
@@ -785,8 +786,19 @@ function ajustarEscalaCam(){ cam3d.s = Number(document.getElementById('camScale'
 /* mostrar/ocultar peças */
 function camVisSet(k, v){ camVis[k] = v; renderCam(); }
 
-/* construção: tampo/base passante */
-function camConstrSet(k, v){ camConstr[k] = v; renderCam(); }
+/* construção: laterais/tampo/base passante
+   cada canto tem um dono: se o tampo não passa, a lateral passa (e vice-versa) */
+function camConstrSet(k, v){ camConstr[k] = v; syncConstrUI(); renderCam(); }
+function camConstrLat(v){
+  // marcar laterais passantes = tampo e base encaixados; desmarcar = os dois passantes
+  camConstr.tampo = !v; camConstr.base = !v;
+  syncConstrUI(); renderCam();
+}
+function syncConstrUI(){
+  document.getElementById('ccTampo').checked = camConstr.tampo;
+  document.getElementById('ccBase').checked  = camConstr.base;
+  document.getElementById('ccLat').checked   = (!camConstr.tampo && !camConstr.base);
+}
 
 /* botão: abre/fecha TODAS as portas de uma vez (animado) */
 function togglePortas(){
