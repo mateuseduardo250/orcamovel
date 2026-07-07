@@ -847,11 +847,16 @@ function desenhaMovel3D(ctx, W, H){
                   c:'#000', part:{tipo:'vao', col:ci}, invisivel:true});
     }
 
+    const arrastada = (tipo, idxOuAnim)=> camDrag && camDrag.mode==='peca' && camDrag.part
+      && camDrag.part.tipo===tipo && camDrag.part.col===ci
+      && (tipo==='prateleira' ? camDrag.part.idx===idxOuAnim : camDrag.part.anim===idxOuAnim);
+
     if(camVis.prateleiras) colPrats(c).forEach((fr, i)=>{
       const key = 'prateleira-'+ci+'-'+i;
       if(camOcultas[key]) return;
       const y = -hh + (2*hh)*fr;
-      add(cx0, cx1, y, y+t, -hd+1, hd-tf, CORES.int, {tipo:'prateleira', col:ci, idx:i, key});
+      const gx = arrastada('prateleira', i) ? (camDrag.gx||0) : 0; // segue o dedo pro lado
+      add(cx0+gx, cx1+gx, y, y+t, -hd+1, hd-tf, CORES.int, {tipo:'prateleira', col:ci, idx:i, key});
     });
 
     if(camVis.gavetas){
@@ -860,8 +865,10 @@ function desenhaMovel3D(ctx, W, H){
         const key = 'gaveta-'+ci+'-'+i, anim = ci+'-'+i;
         if(camOcultas[key]) continue;
         const yb = hh - t - i*gh, yt = yb - gh + 2;
-        const off = (camAnim.gavetas[anim]||0) * Math.min(35, m.P*0.6);
-        const mov = p=>[p[0], p[1], p[2]-off];
+        const seg = arrastada('gaveta', anim);
+        const gx = seg ? (camDrag.gx||0) : 0, gy = seg ? (camDrag.gy||0) : 0;
+        const off = seg ? 8 : (camAnim.gavetas[anim]||0) * Math.min(35, m.P*0.6);
+        const mov = p=>[p[0]+gx, p[1]+gy, p[2]-off];
         const part = {tipo:'gaveta', col:ci, key, anim};
         add(cx0+1, cx1-1, yt, yb, -hd, -hd + Math.min(30, m.P*0.8), CORES.ext, part, mov);
         add(cmeio-6, cmeio+6, (yt+yb)/2-1, (yt+yb)/2+1, -hd-1.5, -hd, CORES.escuro, part, mov);
@@ -1058,6 +1065,33 @@ function faceNoPonto(px, py){ // a face realmente visível sob o dedo
   }
   return melhor;
 }
+function colunaNoPonto(px, py){ // qual coluna está sob o dedo (usa as áreas invisíveis do vão)
+  for(const f of camFaces){
+    if(f.part && f.part.tipo==='vao' && dentroPoly(px, py, f.p)) return f.part.col;
+  }
+  return null;
+}
+function soltarPeca(px, py){ // fim do arrasto: soltou em outra coluna? transfere
+  const p = camDrag.part, cols = modEstr.colunas;
+  if(p && (p.tipo==='gaveta' || p.tipo==='prateleira')){
+    const alvo = colunaNoPonto(px, py);
+    if(alvo !== null && alvo !== p.col){
+      if(p.tipo==='gaveta'){
+        cols[p.col].gav = Math.max(0, cols[p.col].gav - 1);
+        cols[alvo].gav++;
+      } else {
+        const arr = colPrats(cols[p.col]);
+        const fr = arr.splice(p.idx, 1)[0];
+        colPrats(cols[alvo]).push(fr); // mantém a altura em que foi solta
+      }
+      if(navigator.vibrate) navigator.vibrate(25);
+      setInputsTotais();
+      atualizarPrecoCam();
+    }
+  }
+  camDrag.gx = 0; camDrag.gy = 0;
+  renderCam();
+}
 function tocarMovel(px, py){
   fecharMenuPeca();
   const f = faceNoPonto(px, py);
@@ -1237,12 +1271,16 @@ camCv.addEventListener('pointermove', e=>{
   }
   if(camDrag.mode==='peca'){ // arrastando uma peça do móvel
     const p = camDrag.part, cols = modEstr.colunas, m = lerModuloForm();
+    let cosR = Math.cos(cam3d.rot);
+    cosR = (cosR>=0 ? 1 : -1) * Math.max(0.35, Math.abs(cosR));
     if(p.tipo==='prateleira'){
       const dFr = (dy/camS) / Math.max(1, m.A); // px -> cm -> fração da altura
       colPrats(cols[p.col])[p.idx] = Math.min(0.95, Math.max(0.05, camDrag.v0 + dFr));
+      camDrag.gx = dx/(camS*cosR); // deslocamento lateral (pra soltar em outra coluna)
+    } else if(p.tipo==='gaveta'){
+      camDrag.gx = dx/(camS*cosR); // gaveta segue o dedo (fantasma)
+      camDrag.gy = dy/camS;
     } else if(p.tipo==='divisoria'){
-      let cosR = Math.cos(cam3d.rot);
-      cosR = (cosR>=0 ? 1 : -1) * Math.max(0.35, Math.abs(cosR));
       const vaoW = Math.max(1, m.L - 5 - (cols.length-1)*2.5);
       let dFr = (dx/(camS*cosR)) / vaoW;
       dFr = Math.max(-(camDrag.w0-0.08), Math.min(camDrag.w1-0.08, dFr)); // coluna mínima 8%
@@ -1252,9 +1290,6 @@ camCv.addEventListener('pointermove', e=>{
       const dir = (p.idx%2===0) ? -1 : 1; // arrasta pro lado da abertura
       const v = Math.min(1, Math.max(0, camDrag.a0 + dir*dx*0.006));
       camAnim.portas[p.anim] = v; camAnimTarget.portas[p.anim] = v;
-    } else if(p.tipo==='gaveta'){
-      const v = Math.min(1, Math.max(0, camDrag.a0 + dy*0.006));
-      camAnim.gavetas[p.anim] = v; camAnimTarget.gavetas[p.anim] = v;
     }
     renderCam();
     return;
@@ -1275,7 +1310,9 @@ const camSolta = e=>{
   if(camPtrs.size === 0){ camDrag = null; clearTimeout(camHoldTimer); }
 };
 camCv.addEventListener('pointerup', e=>{
-  if(camDrag && (camDrag.mode==='pending' || camDrag.mode==='pecaPending') && !camPinch){
+  if(camDrag && camDrag.mode==='peca'){
+    soltarPeca(e.clientX, e.clientY); // largou a peça: transfere de coluna se for o caso
+  } else if(camDrag && (camDrag.mode==='pending' || camDrag.mode==='pecaPending') && !camPinch){
     tocarMovel(e.clientX, e.clientY); // toque rápido (sem arrastar) = ação/menu da peça
   }
   camSolta(e);
