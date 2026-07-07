@@ -89,6 +89,10 @@
   .ce-row b{min-width:36px; text-align:center; font-size:14px;}
   .cv{display:flex; align-items:center; gap:5px; color:#fff; font-size:12px; margin:0; font-weight:400;}
   .cv input{width:auto; padding:0; margin:0;}
+  #camMenu{position:absolute; bottom:180px; left:12px; right:12px; z-index:104; background:rgba(0,0,0,.88); border-radius:14px; padding:12px 14px; display:none;}
+  #camMenuTitulo{color:#fff; font-weight:800; font-size:15px; margin-bottom:10px;}
+  #camMenuBotoes{display:flex; flex-wrap:wrap; gap:8px;}
+  #camMenuBotoes button{background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.5); color:#fff; border-radius:10px; padding:10px 14px; font-size:14px; font-weight:700; cursor:pointer; flex:1 1 40%;}
   #camMsg{position:absolute; top:44%; left:0; right:0; text-align:center; color:#fff; padding:20px; z-index:101; display:none; text-shadow:0 1px 4px #000;}
 
   /* modo VR (WebXR) */
@@ -172,6 +176,7 @@
         <div><label>Portas</label><input id="mPortas" type="number" value="2" min="0"></div>
         <div><label>Gavetas</label><input id="mGav" type="number" value="0" min="0"></div>
         <div><label>Prateleiras</label><input id="mPrat" type="number" value="1" min="0"></div>
+        <div><label>Divisórias</label><input id="mDiv" type="number" value="0" min="0" max="3"></div>
       </div>
       <div class="desenho" id="desenhoModulo"></div>
       <div class="row" style="margin-top:10px;">
@@ -277,6 +282,7 @@
     <div class="ce-row"><span class="nome">Portas</span><button onclick="camAlt('mPortas',-1,0)">−</button><b id="cePortas">2</b><button onclick="camAlt('mPortas',1,0)">+</button></div>
     <div class="ce-row"><span class="nome">Gavetas</span><button onclick="camAlt('mGav',-1,0)">−</button><b id="ceGav">0</b><button onclick="camAlt('mGav',1,0)">+</button></div>
     <div class="ce-row"><span class="nome">Prateleiras</span><button onclick="camAlt('mPrat',-1,0)">−</button><b id="cePrat">1</b><button onclick="camAlt('mPrat',1,0)">+</button></div>
+    <div class="ce-row"><span class="nome">Divisórias</span><button onclick="camAlt('mDiv',-1,0)">−</button><b id="ceDiv">0</b><button onclick="camAlt('mDiv',1,0)">+</button></div>
     <div style="border-top:1px solid rgba(255,255,255,.25); margin-top:8px; padding-top:8px;">
       <div style="color:#fff; font-size:12px; margin-bottom:6px;">👁 Mostrar peças:</div>
       <div style="display:flex; flex-wrap:wrap; gap:8px 12px;">
@@ -299,12 +305,17 @@
     </div>
   </div>
   <div id="camBase">
-    <label>👆 Toque na porta/gaveta = abre · 🖐 arraste = girar · ✊ segure = mover</label>
+    <label id="camLabel">👆 Toque na porta/gaveta = abre · 🖐 arraste = girar · ✊ segure = mover</label>
     <input type="range" id="camScale" min="0.3" max="3" step="0.05" value="1" oninput="ajustarEscalaCam()">
     <div style="display:flex; gap:10px; margin-top:10px;">
-      <button class="cam-btn" onclick="togglePortas()">🚪 Abrir/fechar</button>
-      <button class="cam-btn" style="flex:1" onclick="tirarFoto()">📸 Foto pro cliente</button>
+      <button class="cam-btn" id="btnEditar" onclick="toggleCamEditMode()">✏️ Editar</button>
+      <button class="cam-btn" onclick="togglePortas()">🚪</button>
+      <button class="cam-btn" style="flex:1" onclick="tirarFoto()">📸 Foto</button>
     </div>
+  </div>
+  <div id="camMenu">
+    <div id="camMenuTitulo"></div>
+    <div id="camMenuBotoes"></div>
   </div>
 </div>
 
@@ -355,13 +366,14 @@ const MATERIAIS_PADRAO = [
   {id:'puxador',  nome:'Puxador',                      un:'unidade',preco:12},
   {id:'parafuso', nome:'Parafusos',                    un:'cento',  preco:35},
   {id:'cola',     nome:'Cola (galão)',                 un:'galão',  preco:50},
+  {id:'tubo',     nome:'Tubo cabideiro',               un:'metro',  preco:18},
 ];
 const TIPOS = {
-  aereo:   {nome:'Armário aéreo',        L:120, A:70,  P:35, portas:2, gav:0, prat:1},
-  base:    {nome:'Balcão / base',        L:150, A:90,  P:55, portas:2, gav:1, prat:1},
-  guarda:  {nome:'Guarda-roupa',         L:180, A:220, P:55, portas:3, gav:2, prat:3},
-  gaveteiro:{nome:'Gaveteiro',           L:60,  A:90,  P:50, portas:0, gav:4, prat:0},
-  estante: {nome:'Estante / nicho',      L:90,  A:180, P:30, portas:0, gav:0, prat:4},
+  aereo:   {nome:'Armário aéreo',        L:120, A:70,  P:35, portas:2, gav:0, prat:1, divs:0},
+  base:    {nome:'Balcão / base',        L:150, A:90,  P:55, portas:2, gav:1, prat:1, divs:1},
+  guarda:  {nome:'Guarda-roupa',         L:180, A:220, P:55, portas:3, gav:2, prat:3, divs:1},
+  gaveteiro:{nome:'Gaveteiro',           L:60,  A:90,  P:50, portas:0, gav:4, prat:0, divs:0},
+  estante: {nome:'Estante / nicho',      L:90,  A:180, P:30, portas:0, gav:0, prat:4, divs:0},
 };
 const AREA_CHAPA = 2.75 * 1.85; // m²
 
@@ -370,8 +382,16 @@ let db = JSON.parse(localStorage.getItem('orcamovel') || 'null') || {
   config: {margem:80, consumiveis:40, perda:1.2, nome:'', fone:'', validade:10},
   projetos: [],
 };
+if(!db.materiais.find(x=>x.id==='tubo')){ // migração: cabideiro em bancos antigos
+  db.materiais.push({id:'tubo', nome:'Tubo cabideiro', un:'metro', preco:18});
+}
+
 let projetoAtual = null;      // índice em db.projetos
 let modoCliente = false;
+let modEstr = null;           // estrutura do módulo em edição: {colunas:[{prat,gav,cab}]}
+let camEditMode = false;      // modo editar peças na câmera
+let camOcultas = {};          // peças ocultadas individualmente (chave -> true)
+let camMenuAlvo = null;       // peça alvo do menu aberto
 
 function salvar(){ localStorage.setItem('orcamovel', JSON.stringify(db)); }
 function fmt(v){ return 'R$ ' + v.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
@@ -380,10 +400,20 @@ function precoDe(id){ const m = db.materiais.find(x=>x.id===id); return m ? Numb
 /* ================== CÁLCULO (o motor) ================== */
 function calcularModulo(m){
   const L=m.L/100, A=m.A/100, P=m.P/100;
-  const portas=Number(m.portas)||0, gav=Number(m.gav)||0, prat=Number(m.prat)||0;
+  const portas=Number(m.portas)||0;
+  let gav=Number(m.gav)||0, prat=Number(m.prat)||0, nDiv=0, cabM=0;
+  if(m.estr && m.estr.colunas && m.estr.colunas.length){
+    const cols = m.estr.colunas;
+    prat = cols.reduce((a,c)=>a+(c.prat||0),0);
+    gav  = cols.reduce((a,c)=>a+(c.gav||0),0);
+    nDiv = cols.length-1;
+    const colWm = Math.max(0.1, (L - 0.05 - nDiv*0.025) / cols.length); // largura da coluna (m)
+    cabM = cols.reduce((a,c)=>a+(c.cab ? colWm : 0), 0);                // metros de tubo
+  }
 
   // áreas em MDF 15mm
   let a15 = 2*(A*P) + 2*(L*P) + prat*(L*P);          // laterais + base/tampo + prateleiras
+  a15 += nDiv*(A*P);                                  // divisórias verticais
   if(portas>0) a15 += L*A;                            // frentes (portas)
   a15 += gav*( L*0.2 + 2*(P*0.15) + L*0.15 );        // frente + caixa da gaveta
   // áreas em MDF 6mm
@@ -394,7 +424,7 @@ function calcularModulo(m){
   const chapas6  = Math.ceil((a6 *perda/AREA_CHAPA)*2)/2;
 
   // fita de borda (bordas aparentes, estimativa)
-  let fita = 2*A + 2*L + prat*L + gav*2*(L+0.2);
+  let fita = 2*A + 2*L + prat*L + gav*2*(L+0.2) + nDiv*A;
   if(portas>0) fita += portas * 2*(A + L/portas);
 
   const dobr = portas * (m.A>160 ? 3 : 2);
@@ -406,7 +436,7 @@ function calcularModulo(m){
     chapas15*precoDe('chapa15') + chapas6*precoDe('chapa6') +
     fita*precoDe('fita') + dobr*precoDe('dobradica') +
     corr*precoDe('corredica') + pux*precoDe('puxador') +
-    parafCentos*precoDe('parafuso');
+    parafCentos*precoDe('parafuso') + cabM*precoDe('tubo');
 
   return {chapas15, chapas6, fita:Math.round(fita*10)/10, dobr, corr, pux, custo};
 }
@@ -498,6 +528,27 @@ function trocarUnidade(){
   desenhar(); renderCamEdit(); renderModulos(); calcular();
 }
 
+/* estrutura por colunas: divisórias verticais criam colunas, cada uma com
+   suas prateleiras, gavetas e cabideiro — editável peça a peça na câmera */
+function rebuildEstrutura(){
+  const nc = (Number(document.getElementById('mDiv').value)||0) + 1;
+  const prat = Number(document.getElementById('mPrat').value)||0;
+  const gav  = Number(document.getElementById('mGav').value)||0;
+  modEstr = { colunas: Array.from({length:nc}, (_,i)=>({
+    prat: Math.floor(prat/nc) + (i < prat%nc ? 1 : 0),
+    gav:  Math.floor(gav/nc)  + (i < gav%nc  ? 1 : 0),
+    cab: false,
+  })) };
+  camOcultas = {};
+}
+function setInputsTotais(){ // menu mexeu na estrutura -> formulário mostra os totais
+  if(!modEstr) return;
+  document.getElementById('mPrat').value = modEstr.colunas.reduce((a,c)=>a+c.prat,0);
+  document.getElementById('mGav').value  = modEstr.colunas.reduce((a,c)=>a+c.gav,0);
+  document.getElementById('mDiv').value  = modEstr.colunas.length-1;
+  renderCamEdit();
+}
+
 function preencherPadrao(){
   const t = TIPOS[document.getElementById('mTipo').value];
   document.getElementById('mL').value = medNum(t.L);
@@ -506,6 +557,8 @@ function preencherPadrao(){
   document.getElementById('mPortas').value = t.portas;
   document.getElementById('mGav').value = t.gav;
   document.getElementById('mPrat').value = t.prat;
+  document.getElementById('mDiv').value = t.divs;
+  rebuildEstrutura();
   desenhar();
 }
 function lerModuloForm(){
@@ -518,12 +571,14 @@ function lerModuloForm(){
     portas:Number(document.getElementById('mPortas').value)||0,
     gav:Number(document.getElementById('mGav').value)||0,
     prat:Number(document.getElementById('mPrat').value)||0,
+    estr: modEstr || undefined,
   };
 }
 function addModulo(){
   if(projetoAtual===null) novoProjeto();
   const m = lerModuloForm();
   if(m.L<=0||m.A<=0||m.P<=0){ alert('Preencha as medidas do módulo.'); return; }
+  if(modEstr) m.estr = JSON.parse(JSON.stringify(modEstr)); // congela a estrutura montada
   db.projetos[projetoAtual].modulos.push(m);
   salvar(); renderModulos(); calcular();
 }
@@ -579,8 +634,11 @@ function desenhar(){
        <text x="${w/2}" y="${h+18}" text-anchor="middle" font-size="11" fill="#6B6B6B">${medNum(m.L)} × ${medNum(m.A)} × ${medNum(m.P)} ${unidade()}</text>
      </svg>`;
 }
-['mL','mA','mP','mPortas','mGav','mPrat'].forEach(id=>{
-  document.getElementById(id).addEventListener('input', desenhar);
+['mL','mA','mP','mPortas','mGav','mPrat','mDiv'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', ()=>{
+    if(id==='mGav'||id==='mPrat'||id==='mDiv') rebuildEstrutura(); // redistribui nas colunas
+    desenhar();
+  });
 });
 
 /* ================== PREÇO VIVO ================== */
@@ -758,25 +816,59 @@ function desenhaMovel3D(ctx, W, H){
   if(camVis.base)  add(xB1, xB2,  hh-t, hh,  -hd, hd, CORES.ext);
   if(camVis.fundo) add(-hw, hw, -hh, hh, hd-tf, hd, CORES.int);
 
-  if(camVis.prateleiras) for(let i=1;i<=m.prat;i++){   // prateleiras (tábuas reais)
-    const y = -hh + (2*hh)*i/(m.prat+1);
-    add(-hw+t, hw-t, y, y+t, -hd+1, hd-tf, CORES.int);
-  }
+  // interior por colunas (divisórias verticais criam colunas independentes)
+  const cols = (m.estr && m.estr.colunas && m.estr.colunas.length)
+    ? m.estr.colunas : [{prat:m.prat, gav:m.gav, cab:false}];
+  const nDiv = cols.length - 1;
+  const vaoX0 = -hw+t, vaoX1 = hw-t;
+  const colW = ((vaoX1-vaoX0) - nDiv*t) / cols.length;
+  let cxAtual = vaoX0;
+  cols.forEach((c, ci)=>{
+    const cx0 = cxAtual, cx1 = cxAtual + colW, cmeio = (cx0+cx1)/2;
 
-  if(camVis.gavetas){                                  // gavetas: toque = desliza pra fora
-    const gh = Math.min(25, (2*hh)/6);
-    for(let i=0;i<m.gav;i++){
-      const yb = hh - t - i*gh, yt = yb - gh + 2;
-      const off = (camAnim.gavetas[i]||0) * Math.min(35, m.P*0.6);
-      const mov = p=>[p[0], p[1], p[2]-off];
-      const part = {tipo:'gaveta', idx:i};
-      add(-hw+t+1, hw-t-1, yt, yb, -hd, -hd + Math.min(30, m.P*0.8), CORES.ext, part, mov);
-      add(-6, 6, (yt+yb)/2-1, (yt+yb)/2+1, -hd-1.5, -hd, CORES.escuro, part, mov); // puxador
+    if(camEditMode){ // área invisível do vão: toque = menu de adicionar peça
+      const zv = hd - tf - 0.5;
+      faces.push({pts:[[cx0,-hh+t,zv],[cx1,-hh+t,zv],[cx1,hh-t,zv],[cx0,hh-t,zv]],
+                  c:'#000', part:{tipo:'vao', col:ci}, invisivel:true});
     }
-  }
+
+    if(camVis.prateleiras) for(let i=1;i<=c.prat;i++){
+      const key = 'prateleira-'+ci+'-'+i;
+      if(camOcultas[key]) continue;
+      const y = -hh + (2*hh)*i/(c.prat+1);
+      add(cx0, cx1, y, y+t, -hd+1, hd-tf, CORES.int, {tipo:'prateleira', col:ci, key});
+    }
+
+    if(camVis.gavetas){
+      const gh = Math.min(25, (2*hh)/6);
+      for(let i=0;i<c.gav;i++){
+        const key = 'gaveta-'+ci+'-'+i, anim = ci+'-'+i;
+        if(camOcultas[key]) continue;
+        const yb = hh - t - i*gh, yt = yb - gh + 2;
+        const off = (camAnim.gavetas[anim]||0) * Math.min(35, m.P*0.6);
+        const mov = p=>[p[0], p[1], p[2]-off];
+        const part = {tipo:'gaveta', col:ci, key, anim};
+        add(cx0+1, cx1-1, yt, yb, -hd, -hd + Math.min(30, m.P*0.8), CORES.ext, part, mov);
+        add(cmeio-6, cmeio+6, (yt+yb)/2-1, (yt+yb)/2+1, -hd-1.5, -hd, CORES.escuro, part, mov);
+      }
+    }
+
+    if(c.cab && !camOcultas['cabideiro-'+ci]){ // tubo cabideiro no alto da coluna
+      const y = -hh + t + 10;
+      add(cx0+0.5, cx1-0.5, y, y+2.5, -1.2, 1.2, CORES.escuro, {tipo:'cabideiro', col:ci, key:'cabideiro-'+ci});
+    }
+
+    if(ci < nDiv){ // divisória à direita da coluna
+      const key = 'divisoria-'+ci;
+      if(!camOcultas[key]) add(cx1, cx1+t, -hh+t, hh-t, -hd+0.5, hd-tf, CORES.int, {tipo:'divisoria', idx:ci, key});
+    }
+    cxAtual = cx1 + t;
+  });
 
   if(camVis.portas && m.portas>0){                     // portas: toque = gira na dobradiça
     for(let i=0;i<m.portas;i++){
+      const key = 'porta-'+i;
+      if(camOcultas[key]) continue;
       const x1 = -hw + (2*hw)*i/m.portas + 0.6;
       const x2 = -hw + (2*hw)*(i+1)/m.portas - 0.6;
       const hingeEsq = (i%2===0);
@@ -786,7 +878,7 @@ function desenhaMovel3D(ctx, W, H){
         const dx = p[0]-hx, dz = p[2]-zp;
         return [hx + dx*Math.cos(a) - dz*Math.sin(a), p[1], zp + dx*Math.sin(a) + dz*Math.cos(a)];
       };
-      const part = {tipo:'porta', idx:i};
+      const part = {tipo:'porta', idx:i, key, anim:i};
       add(x1, x2, -hh+0.6, hh-0.6, -hd-t, -hd, CORES.ext, part, gira);
       const frac = hingeEsq ? 0.88 : 0.12;
       const px = x1 + (x2-x1)*frac;
@@ -806,13 +898,15 @@ function desenhaMovel3D(ctx, W, H){
   ctx.globalAlpha = 0.95;
   ctx.lineJoin = 'round';
   ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 20;
-  faces.forEach((f,idx)=>{
+  let primeira = true;
+  faces.forEach(f=>{
+    if(f.invisivel) return; // áreas de toque do modo editar não são pintadas
     ctx.beginPath();
     f.p.forEach((q,i)=> i ? ctx.lineTo(q.x,q.y) : ctx.moveTo(q.x,q.y));
     ctx.closePath();
     ctx.fillStyle = f.c;
     ctx.fill();
-    if(idx===0) ctx.shadowBlur = 0; // sombra só na silhueta
+    if(primeira){ ctx.shadowBlur = 0; primeira = false; } // sombra só na silhueta
     ctx.strokeStyle = 'rgba(61,40,16,.8)'; ctx.lineWidth = 1.4;
     ctx.stroke();
   });
@@ -835,6 +929,11 @@ async function abrirCamera(){
   camVis = {portas:true, gavetas:true, prateleiras:true, fundo:true, tampo:true, base:true, laterais:true};
   camConstr = {tampo:false, base:false};
   camAnim = {portas:{}, gavetas:{}}; camAnimTarget = {portas:{}, gavetas:{}};
+  if(!modEstr) rebuildEstrutura();
+  camEditMode = false;
+  fecharMenuPeca();
+  document.getElementById('btnEditar').style.background = 'rgba(255,255,255,.15)';
+  document.getElementById('camLabel').textContent = '👆 Toque na porta/gaveta = abre · 🖐 arraste = girar · ✊ segure = mover';
   document.querySelectorAll('.camvis').forEach(c=> c.checked = true);
   syncConstrUI();
   document.getElementById('camScale').value = 1;
@@ -921,18 +1020,94 @@ function areaPoly(pts){
   return Math.abs(a/2);
 }
 function tocarMovel(px, py){
+  fecharMenuPeca();
   for(let i=camFaces.length-1; i>=0; i--){ // da frente pro fundo
     const f = camFaces[i];
-    if(areaPoly(f.p) < 80) continue;             // ignora faces de quina (quase invisíveis)
+    if(!f.invisivel && areaPoly(f.p) < 80) continue; // ignora faces de quina
     if(!dentroPoly(px, py, f.p)) continue;
-    if(f.part){                                  // a peça que você está VENDO nesse ponto
+    if(camEditMode){
+      if(f.part) abrirMenuPeca(f.part);          // modo editar: menu da peça
+      return;
+    }
+    if(f.part && (f.part.tipo==='porta' || f.part.tipo==='gaveta')){
       const alvo = camAnimTarget[f.part.tipo+'s'];
-      alvo[f.part.idx] = alvo[f.part.idx] ? 0 : 1;
+      alvo[f.part.anim] = alvo[f.part.anim] ? 0 : 1;
       if(navigator.vibrate) navigator.vibrate(15);
       iniciarAnim();
     }
-    return; // se a face da frente é carcaça (prateleira/fundo/lateral), não faz nada
+    return; // se a face da frente é carcaça, não faz nada
   }
+}
+
+/* ===== modo editar: menu por peça ===== */
+function toggleCamEditMode(){
+  camEditMode = !camEditMode;
+  document.getElementById('btnEditar').style.background = camEditMode ? 'rgba(46,204,113,.45)' : 'rgba(255,255,255,.15)';
+  document.getElementById('camLabel').textContent = camEditMode
+    ? '✏️ Toque numa peça = excluir/ocultar · toque no espaço vazio da coluna = adicionar'
+    : '👆 Toque na porta/gaveta = abre · 🖐 arraste = girar · ✊ segure = mover';
+  fecharMenuPeca();
+  renderCam();
+}
+function abrirMenuPeca(part){
+  camMenuAlvo = part;
+  const nomes = {prateleira:'Prateleira', gaveta:'Gaveta', porta:'Porta', divisoria:'Divisória',
+                 cabideiro:'Cabideiro', vao:'Coluna '+(part.col+1)+' — espaço vazio'};
+  let botoes = '';
+  if(part.tipo === 'vao'){
+    botoes = `<button onclick="menuAcao('prat')">➕ Prateleira</button>
+              <button onclick="menuAcao('gav')">➕ Gaveta</button>`
+           + (modEstr.colunas[part.col].cab ? '' : `<button onclick="menuAcao('cab')">➕ Cabideiro</button>`);
+  } else {
+    if(part.tipo==='porta' || part.tipo==='gaveta') botoes += `<button onclick="menuAcao('abrir')">↔ Abrir/fechar</button>`;
+    botoes += `<button onclick="menuAcao('ocultar')">👁 Ocultar</button>
+               <button onclick="menuAcao('excluir')">🗑 Excluir</button>`;
+  }
+  document.getElementById('camMenuTitulo').textContent = nomes[part.tipo] || part.tipo;
+  document.getElementById('camMenuBotoes').innerHTML = botoes + `<button onclick="fecharMenuPeca()">✕ Fechar</button>`;
+  document.getElementById('camMenu').style.display = 'block';
+  if(navigator.vibrate) navigator.vibrate(15);
+}
+function fecharMenuPeca(){
+  camMenuAlvo = null;
+  const menu = document.getElementById('camMenu');
+  if(menu) menu.style.display = 'none';
+}
+function menuAcao(acao){
+  const p = camMenuAlvo;
+  if(!p || !modEstr){ fecharMenuPeca(); return; }
+  const cols = modEstr.colunas;
+  if(p.tipo === 'vao'){
+    if(acao==='prat') cols[p.col].prat++;
+    if(acao==='gav')  cols[p.col].gav++;
+    if(acao==='cab')  cols[p.col].cab = true;
+  } else if(acao === 'ocultar'){
+    camOcultas[p.key] = true; // some da tela, mas continua no preço
+  } else if(acao === 'abrir'){
+    const alvo = camAnimTarget[p.tipo+'s'];
+    alvo[p.anim] = alvo[p.anim] ? 0 : 1;
+    iniciarAnim();
+  } else if(acao === 'excluir'){ // sai da tela E do preço
+    if(p.tipo==='prateleira') cols[p.col].prat = Math.max(0, cols[p.col].prat-1);
+    if(p.tipo==='gaveta')     cols[p.col].gav  = Math.max(0, cols[p.col].gav-1);
+    if(p.tipo==='cabideiro')  cols[p.col].cab  = false;
+    if(p.tipo==='porta'){
+      const el = document.getElementById('mPortas');
+      el.value = Math.max(0, (Number(el.value)||0)-1);
+    }
+    if(p.tipo==='divisoria'){ // funde as duas colunas vizinhas
+      const i = p.idx;
+      cols[i].prat += cols[i+1].prat;
+      cols[i].gav  += cols[i+1].gav;
+      cols[i].cab   = cols[i].cab || cols[i+1].cab;
+      cols.splice(i+1, 1);
+    }
+  }
+  setInputsTotais();
+  desenhar();
+  atualizarPrecoCam();
+  renderCam();
+  fecharMenuPeca();
 }
 
 /* painel "Montar" dentro da câmera */
@@ -950,6 +1125,7 @@ function renderCamEdit(){
   document.getElementById('cePortas').textContent = document.getElementById('mPortas').value;
   document.getElementById('ceGav').textContent = document.getElementById('mGav').value;
   document.getElementById('cePrat').textContent = document.getElementById('mPrat').value;
+  document.getElementById('ceDiv').textContent = document.getElementById('mDiv').value;
 }
 function camAlt(id, delta, min){
   const el = document.getElementById(id);
@@ -957,6 +1133,7 @@ function camAlt(id, delta, min){
   const f = ehMedida ? U2CM[unidade()] : 1; // delta/min chegam em cm
   const v = Math.max(min/f, (Number(el.value)||0) + delta/f);
   el.value = (ehMedida && unidade()==='m') ? Math.round(v*100)/100 : Math.round(v);
+  if(id==='mGav'||id==='mPrat'||id==='mDiv') rebuildEstrutura(); // redistribui nas colunas
   desenhar();          // atualiza o desenho do formulário também
   renderCamEdit();
   atualizarPrecoCam(); // preço vivo na câmera
@@ -1313,6 +1490,7 @@ if(unidade()!=='cm'){ // converte os valores iniciais (que estão em cm) pra uni
     el.value = unidade()==='m' ? Math.round(v*100)/100 : Math.round(v);
   });
 }
+rebuildEstrutura();
 renderProjetos();
 renderMateriais();
 desenhar();
