@@ -404,11 +404,11 @@ function calcularModulo(m){
   let gav=Number(m.gav)||0, prat=Number(m.prat)||0, nDiv=0, cabM=0;
   if(m.estr && m.estr.colunas && m.estr.colunas.length){
     const cols = m.estr.colunas;
-    prat = cols.reduce((a,c)=>a+(c.prat||0),0);
+    prat = cols.reduce((a,c)=>a+colPrats(c).length,0);
     gav  = cols.reduce((a,c)=>a+(c.gav||0),0);
     nDiv = cols.length-1;
-    const colWm = Math.max(0.1, (L - 0.05 - nDiv*0.025) / cols.length); // largura da coluna (m)
-    cabM = cols.reduce((a,c)=>a+(c.cab ? colWm : 0), 0);                // metros de tubo
+    const vaoM = Math.max(0.1, L - 0.05 - nDiv*0.025); // vão interno (m)
+    cabM = cols.reduce((a,c)=>a+(c.cab ? vaoM*(c.w||1/cols.length) : 0), 0); // metros de tubo
   }
 
   // áreas em MDF 15mm
@@ -530,20 +530,32 @@ function trocarUnidade(){
 
 /* estrutura por colunas: divisórias verticais criam colunas, cada uma com
    suas prateleiras, gavetas e cabideiro — editável peça a peça na câmera */
+function colPrats(c){ // posições das prateleiras (frações 0..1); compatível com modelo antigo
+  if(!c.prats){
+    const n = c.prat||0;
+    c.prats = Array.from({length:n}, (_,i)=>(i+1)/(n+1));
+    delete c.prat;
+  }
+  return c.prats;
+}
 function rebuildEstrutura(){
   const nc = (Number(document.getElementById('mDiv').value)||0) + 1;
   const prat = Number(document.getElementById('mPrat').value)||0;
   const gav  = Number(document.getElementById('mGav').value)||0;
-  modEstr = { colunas: Array.from({length:nc}, (_,i)=>({
-    prat: Math.floor(prat/nc) + (i < prat%nc ? 1 : 0),
-    gav:  Math.floor(gav/nc)  + (i < gav%nc  ? 1 : 0),
-    cab: false,
-  })) };
+  modEstr = { colunas: Array.from({length:nc}, (_,i)=>{
+    const np = Math.floor(prat/nc) + (i < prat%nc ? 1 : 0);
+    return {
+      prats: Array.from({length:np}, (_,j)=>(j+1)/(np+1)), // posições verticais (fração)
+      gav:  Math.floor(gav/nc) + (i < gav%nc ? 1 : 0),
+      cab: false,
+      w: 1/nc, // fração da largura do vão
+    };
+  }) };
   camOcultas = {};
 }
 function setInputsTotais(){ // menu mexeu na estrutura -> formulário mostra os totais
   if(!modEstr) return;
-  document.getElementById('mPrat').value = modEstr.colunas.reduce((a,c)=>a+c.prat,0);
+  document.getElementById('mPrat').value = modEstr.colunas.reduce((a,c)=>a+colPrats(c).length,0);
   document.getElementById('mGav').value  = modEstr.colunas.reduce((a,c)=>a+c.gav,0);
   document.getElementById('mDiv').value  = modEstr.colunas.length-1;
   renderCamEdit();
@@ -756,6 +768,7 @@ let camVis = {portas:true, gavetas:true, prateleiras:true, fundo:true, tampo:tru
 let camConstr = {tampo:false, base:false}; // construção: tampo/base passante
 let camAnim = {portas:{}, gavetas:{}}, camAnimTarget = {portas:{}, gavetas:{}}, camAnimando = false;
 let camFaces = [];
+let camS = 1; // escala px/cm do último render (pro arrasto de peças)
 const camCv = document.getElementById('camCanvas');
 
 /* projeção 3D em perspectiva (rotação Y + leve inclinação X) */
@@ -816,15 +829,17 @@ function desenhaMovel3D(ctx, W, H){
   if(camVis.base)  add(xB1, xB2,  hh-t, hh,  -hd, hd, CORES.ext);
   if(camVis.fundo) add(-hw, hw, -hh, hh, hd-tf, hd, CORES.int);
 
-  // interior por colunas (divisórias verticais criam colunas independentes)
+  // interior por colunas (larguras livres; prateleiras em posições livres)
+  camS = s; // escala px/cm do último desenho — usada pra converter arrasto do dedo
   const cols = (m.estr && m.estr.colunas && m.estr.colunas.length)
-    ? m.estr.colunas : [{prat:m.prat, gav:m.gav, cab:false}];
+    ? m.estr.colunas : [{prats:[], gav:m.gav, cab:false, w:1}];
   const nDiv = cols.length - 1;
   const vaoX0 = -hw+t, vaoX1 = hw-t;
-  const colW = ((vaoX1-vaoX0) - nDiv*t) / cols.length;
+  const vaoW = (vaoX1-vaoX0) - nDiv*t;
   let cxAtual = vaoX0;
   cols.forEach((c, ci)=>{
-    const cx0 = cxAtual, cx1 = cxAtual + colW, cmeio = (cx0+cx1)/2;
+    const cw = vaoW * (c.w || 1/cols.length);
+    const cx0 = cxAtual, cx1 = cxAtual + cw, cmeio = (cx0+cx1)/2;
 
     if(camEditMode){ // área invisível do vão: toque = menu de adicionar peça
       const zv = hd - tf - 0.5;
@@ -832,12 +847,12 @@ function desenhaMovel3D(ctx, W, H){
                   c:'#000', part:{tipo:'vao', col:ci}, invisivel:true});
     }
 
-    if(camVis.prateleiras) for(let i=1;i<=c.prat;i++){
+    if(camVis.prateleiras) colPrats(c).forEach((fr, i)=>{
       const key = 'prateleira-'+ci+'-'+i;
-      if(camOcultas[key]) continue;
-      const y = -hh + (2*hh)*i/(c.prat+1);
-      add(cx0, cx1, y, y+t, -hd+1, hd-tf, CORES.int, {tipo:'prateleira', col:ci, key});
-    }
+      if(camOcultas[key]) return;
+      const y = -hh + (2*hh)*fr;
+      add(cx0, cx1, y, y+t, -hd+1, hd-tf, CORES.int, {tipo:'prateleira', col:ci, idx:i, key});
+    });
 
     if(camVis.gavetas){
       const gh = Math.min(25, (2*hh)/6);
@@ -1019,23 +1034,43 @@ function areaPoly(pts){
   }
   return Math.abs(a/2);
 }
+/* profundidade da face NO PONTO tocado (não na média) — precisão do dedo */
+function zNoPonto(f, px, py){
+  const P = f.p;
+  for(const tri of [[0,1,2],[0,2,3]]){
+    const a=P[tri[0]], b=P[tri[1]], c=P[tri[2]];
+    const den = (b.y-c.y)*(a.x-c.x) + (c.x-b.x)*(a.y-c.y);
+    if(Math.abs(den) < 1e-6) continue;
+    const w1 = ((b.y-c.y)*(px-c.x) + (c.x-b.x)*(py-c.y)) / den;
+    const w2 = ((c.y-a.y)*(px-c.x) + (a.x-c.x)*(py-c.y)) / den;
+    const w3 = 1 - w1 - w2;
+    if(w1>=-0.02 && w2>=-0.02 && w3>=-0.02) return w1*a.z + w2*b.z + w3*c.z;
+  }
+  return null;
+}
+function faceNoPonto(px, py){ // a face realmente visível sob o dedo
+  let melhor = null, mz = Infinity;
+  for(const f of camFaces){
+    if(!f.invisivel && areaPoly(f.p) < 60) continue; // quinas finas não roubam toque
+    if(!dentroPoly(px, py, f.p)) continue;
+    const z = zNoPonto(f, px, py);
+    if(z !== null && z < mz){ mz = z; melhor = f; }
+  }
+  return melhor;
+}
 function tocarMovel(px, py){
   fecharMenuPeca();
-  for(let i=camFaces.length-1; i>=0; i--){ // da frente pro fundo
-    const f = camFaces[i];
-    if(!f.invisivel && areaPoly(f.p) < 80) continue; // ignora faces de quina
-    if(!dentroPoly(px, py, f.p)) continue;
-    if(camEditMode){
-      if(f.part) abrirMenuPeca(f.part);          // modo editar: menu da peça
-      return;
-    }
-    if(f.part && (f.part.tipo==='porta' || f.part.tipo==='gaveta')){
-      const alvo = camAnimTarget[f.part.tipo+'s'];
-      alvo[f.part.anim] = alvo[f.part.anim] ? 0 : 1;
-      if(navigator.vibrate) navigator.vibrate(15);
-      iniciarAnim();
-    }
-    return; // se a face da frente é carcaça, não faz nada
+  const f = faceNoPonto(px, py);
+  if(!f) return;
+  if(camEditMode){
+    if(f.part) abrirMenuPeca(f.part);            // modo editar: menu da peça
+    return;
+  }
+  if(f.part && (f.part.tipo==='porta' || f.part.tipo==='gaveta')){
+    const alvo = camAnimTarget[f.part.tipo+'s'];
+    alvo[f.part.anim] = alvo[f.part.anim] ? 0 : 1;
+    if(navigator.vibrate) navigator.vibrate(15);
+    iniciarAnim();
   }
 }
 
@@ -1078,7 +1113,7 @@ function menuAcao(acao){
   if(!p || !modEstr){ fecharMenuPeca(); return; }
   const cols = modEstr.colunas;
   if(p.tipo === 'vao'){
-    if(acao==='prat') cols[p.col].prat++;
+    if(acao==='prat') colPrats(cols[p.col]).push(0.5); // nasce no meio, arrasta depois
     if(acao==='gav')  cols[p.col].gav++;
     if(acao==='cab')  cols[p.col].cab = true;
   } else if(acao === 'ocultar'){
@@ -1088,7 +1123,7 @@ function menuAcao(acao){
     alvo[p.anim] = alvo[p.anim] ? 0 : 1;
     iniciarAnim();
   } else if(acao === 'excluir'){ // sai da tela E do preço
-    if(p.tipo==='prateleira') cols[p.col].prat = Math.max(0, cols[p.col].prat-1);
+    if(p.tipo==='prateleira') colPrats(cols[p.col]).splice(p.idx, 1); // exclui AQUELA prateleira
     if(p.tipo==='gaveta')     cols[p.col].gav  = Math.max(0, cols[p.col].gav-1);
     if(p.tipo==='cabideiro')  cols[p.col].cab  = false;
     if(p.tipo==='porta'){
@@ -1097,9 +1132,10 @@ function menuAcao(acao){
     }
     if(p.tipo==='divisoria'){ // funde as duas colunas vizinhas
       const i = p.idx;
-      cols[i].prat += cols[i+1].prat;
-      cols[i].gav  += cols[i+1].gav;
-      cols[i].cab   = cols[i].cab || cols[i+1].cab;
+      colPrats(cols[i]).push(...colPrats(cols[i+1]));
+      cols[i].gav += cols[i+1].gav;
+      cols[i].cab  = cols[i].cab || cols[i+1].cab;
+      cols[i].w    = (cols[i].w||0) + (cols[i+1].w||0);
       cols.splice(i+1, 1);
     }
   }
@@ -1155,12 +1191,25 @@ camCv.addEventListener('pointerdown', e=>{
     camPinch = { d: Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y), s: cam3d.s };
   } else if(camPtrs.size === 1){
     camDrag = {x:e.clientX, y:e.clientY, rot:cam3d.rot, tilt:cam3d.tilt, ox:cam3d.x, oy:cam3d.y, mode:'pending'};
-    camHoldTimer = setTimeout(()=>{
-      if(camDrag && camDrag.mode==='pending'){
-        camDrag.mode = 'mover';
-        if(navigator.vibrate) navigator.vibrate(40); // avisa que "pegou" o móvel
+    if(camEditMode && modEstr){ // no modo editar, pegar uma peça = arrastar a peça
+      const f = faceNoPonto(e.clientX, e.clientY);
+      if(f && f.part && f.part.tipo!=='vao'){
+        const p = f.part, cols = modEstr.colunas;
+        camDrag.mode = 'pecaPending';
+        camDrag.part = p;
+        if(p.tipo==='prateleira') camDrag.v0 = colPrats(cols[p.col])[p.idx];
+        if(p.tipo==='divisoria'){ camDrag.w0 = cols[p.idx].w||0.5; camDrag.w1 = cols[p.idx+1].w||0.5; }
+        if(p.tipo==='porta' || p.tipo==='gaveta') camDrag.a0 = camAnim[p.tipo+'s'][p.anim]||0;
       }
-    }, 350);
+    }
+    if(camDrag.mode==='pending'){
+      camHoldTimer = setTimeout(()=>{
+        if(camDrag && camDrag.mode==='pending'){
+          camDrag.mode = 'mover';
+          if(navigator.vibrate) navigator.vibrate(40); // avisa que "pegou" o móvel
+        }
+      }, 350);
+    }
   }
 });
 camCv.addEventListener('pointermove', e=>{
@@ -1182,6 +1231,34 @@ camCv.addEventListener('pointermove', e=>{
     camDrag.mode = 'girar';
     clearTimeout(camHoldTimer);
   }
+  if(camDrag.mode==='pecaPending' && Math.hypot(dx,dy) > 8){
+    camDrag.mode = 'peca';
+    fecharMenuPeca();
+  }
+  if(camDrag.mode==='peca'){ // arrastando uma peça do móvel
+    const p = camDrag.part, cols = modEstr.colunas, m = lerModuloForm();
+    if(p.tipo==='prateleira'){
+      const dFr = (dy/camS) / Math.max(1, m.A); // px -> cm -> fração da altura
+      colPrats(cols[p.col])[p.idx] = Math.min(0.95, Math.max(0.05, camDrag.v0 + dFr));
+    } else if(p.tipo==='divisoria'){
+      let cosR = Math.cos(cam3d.rot);
+      cosR = (cosR>=0 ? 1 : -1) * Math.max(0.35, Math.abs(cosR));
+      const vaoW = Math.max(1, m.L - 5 - (cols.length-1)*2.5);
+      let dFr = (dx/(camS*cosR)) / vaoW;
+      dFr = Math.max(-(camDrag.w0-0.08), Math.min(camDrag.w1-0.08, dFr)); // coluna mínima 8%
+      cols[p.idx].w   = camDrag.w0 + dFr;
+      cols[p.idx+1].w = camDrag.w1 - dFr;
+    } else if(p.tipo==='porta'){
+      const dir = (p.idx%2===0) ? -1 : 1; // arrasta pro lado da abertura
+      const v = Math.min(1, Math.max(0, camDrag.a0 + dir*dx*0.006));
+      camAnim.portas[p.anim] = v; camAnimTarget.portas[p.anim] = v;
+    } else if(p.tipo==='gaveta'){
+      const v = Math.min(1, Math.max(0, camDrag.a0 + dy*0.006));
+      camAnim.gavetas[p.anim] = v; camAnimTarget.gavetas[p.anim] = v;
+    }
+    renderCam();
+    return;
+  }
   if(camDrag.mode==='girar'){
     cam3d.rot  = camDrag.rot + dx*0.008;
     cam3d.tilt = Math.max(-0.9, Math.min(0.9, camDrag.tilt + dy*0.006));
@@ -1198,7 +1275,9 @@ const camSolta = e=>{
   if(camPtrs.size === 0){ camDrag = null; clearTimeout(camHoldTimer); }
 };
 camCv.addEventListener('pointerup', e=>{
-  if(camDrag && camDrag.mode==='pending' && !camPinch) tocarMovel(e.clientX, e.clientY); // toque rápido = abrir peça
+  if(camDrag && (camDrag.mode==='pending' || camDrag.mode==='pecaPending') && !camPinch){
+    tocarMovel(e.clientX, e.clientY); // toque rápido (sem arrastar) = ação/menu da peça
+  }
   camSolta(e);
 });
 camCv.addEventListener('pointercancel', camSolta);
