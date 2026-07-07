@@ -423,6 +423,14 @@ function calcularModulo(m){
   // áreas em MDF 15mm
   let a15 = 2*(A*P) + 2*(L*P) + prat*(L*P);          // laterais + base/tampo + prateleiras
   a15 += nDiv*(A*P);                                  // divisórias verticais
+  if(m.estr && m.estr.eng){                           // engrossos (tira de ~10cm em 15mm)
+    const e = m.estr.eng, tira = 0.1;
+    if(e.latE)  a15 += A*tira;
+    if(e.latD)  a15 += A*tira;
+    if(e.tampo) a15 += L*tira;
+    if(e.base)  a15 += L*tira;
+    a15 += Object.values(e.divs||{}).filter(Boolean).length * A*tira;
+  }
   if(portas>0) a15 += L*A;                            // frentes (portas)
   a15 += gav*( L*0.2 + 2*(P*0.15) + L*0.15 );        // frente + caixa da gaveta
   // áreas em MDF 6mm
@@ -541,6 +549,11 @@ function trocarUnidade(){
 
 /* estrutura por colunas: divisórias verticais criam colunas, cada uma com
    suas prateleiras, gavetas e cabideiro — editável peça a peça na câmera */
+function engDe(){ // engrossos do módulo (tira dupla na frente da peça)
+  if(!modEstr.eng) modEstr.eng = {latE:false, latD:false, tampo:false, base:false, divs:{}};
+  if(!modEstr.eng.divs) modEstr.eng.divs = {};
+  return modEstr.eng;
+}
 function colPrats(c){ // posições das prateleiras (frações 0..1); compatível com modelo antigo
   if(!c.prats){
     const n = c.prat||0;
@@ -830,16 +843,31 @@ function desenhaMovel3D(ctx, W, H){
   };
 
   // construção: passante = atravessa de fora a fora; a outra peça encaixa entre
+  const eng = (m.estr && m.estr.eng) || {divs:{}};
+  const engDivs = eng.divs || {};
+  const ENG = 8; // profundidade da tira de engrosso (cm)
   const yLat1 = -hh + (camConstr.tampo ? t : 0);
   const yLat2 =  hh - (camConstr.base  ? t : 0);
   if(camVis.laterais){
-    add(-hw, -hw+t, yLat1, yLat2, -hd, hd, CORES.ext); // lateral esquerda
-    add( hw-t, hw,  yLat1, yLat2, -hd, hd, CORES.ext); // lateral direita
+    if(!camOcultas['lateral-esq']){
+      add(-hw, -hw+t, yLat1, yLat2, -hd, hd, CORES.ext, {tipo:'lateral', lado:'latE', key:'lateral-esq'});
+      if(eng.latE) add(-hw+t, -hw+2*t, yLat1, yLat2, -hd, -hd+ENG, CORES.ext, {tipo:'lateral', lado:'latE', key:'lateral-esq'});
+    }
+    if(!camOcultas['lateral-dir']){
+      add( hw-t, hw,  yLat1, yLat2, -hd, hd, CORES.ext, {tipo:'lateral', lado:'latD', key:'lateral-dir'});
+      if(eng.latD) add(hw-2*t, hw-t, yLat1, yLat2, -hd, -hd+ENG, CORES.ext, {tipo:'lateral', lado:'latD', key:'lateral-dir'});
+    }
   }
   const xT1 = camConstr.tampo ? -hw : -hw+t, xT2 = camConstr.tampo ? hw : hw-t;
   const xB1 = camConstr.base  ? -hw : -hw+t, xB2 = camConstr.base  ? hw : hw-t;
-  if(camVis.tampo) add(xT1, xT2, -hh, -hh+t, -hd, hd, CORES.ext);
-  if(camVis.base)  add(xB1, xB2,  hh-t, hh,  -hd, hd, CORES.ext);
+  if(camVis.tampo && !camOcultas['tampo']){
+    add(xT1, xT2, -hh, -hh+t, -hd, hd, CORES.ext, {tipo:'tampo', key:'tampo'});
+    if(eng.tampo) add(xT1, xT2, -hh+t, -hh+2*t, -hd, -hd+ENG, CORES.ext, {tipo:'tampo', key:'tampo'});
+  }
+  if(camVis.base && !camOcultas['base']){
+    add(xB1, xB2,  hh-t, hh,  -hd, hd, CORES.ext, {tipo:'base', key:'base'});
+    if(eng.base) add(xB1, xB2, hh-2*t, hh-t, -hd, -hd+ENG, CORES.ext, {tipo:'base', key:'base'});
+  }
   if(camVis.fundo) add(-hw, hw, -hh, hh, hd-tf, hd, CORES.int);
 
   // interior por colunas (larguras livres; prateleiras em posições livres)
@@ -897,7 +925,12 @@ function desenhaMovel3D(ctx, W, H){
 
     if(ci < nDiv){ // divisória à direita da coluna
       const key = 'divisoria-'+ci;
-      if(!camOcultas[key]) add(cx1, cx1+t, -hh+t, hh-t, -hd+0.5, hd-tf, CORES.int, {tipo:'divisoria', idx:ci, key});
+      if(!camOcultas[key]){
+        add(cx1, cx1+t, -hh+t, hh-t, -hd+0.5, hd-tf, CORES.int, {tipo:'divisoria', idx:ci, key});
+        if(engDivs[ci]){ // engrosso: tira dupla na frente (folga pra porta/dobradiça)
+          add(cx1-t/2, cx1+t*1.5, -hh+t, hh-t, -hd+0.5, -hd+ENG, CORES.ext, {tipo:'divisoria', idx:ci, key});
+        }
+      }
     }
     cxAtual = cx1 + t;
   });
@@ -1155,14 +1188,24 @@ function toggleCamEditMode(){
 function abrirMenuPeca(part){
   camMenuAlvo = part;
   const nomes = {prateleira:'Prateleira', gaveta:'Gaveta', porta:'Porta', divisoria:'Divisória',
-                 cabideiro:'Cabideiro', vao:'Coluna '+(part.col+1)+' — espaço vazio'};
+                 cabideiro:'Cabideiro', lateral:'Lateral', tampo:'Tampo', base:'Base',
+                 vao:'Coluna '+(part.col+1)+' — espaço vazio'};
   let botoes = '';
   if(part.tipo === 'vao'){
     botoes = `<button onclick="menuAcao('prat')">➕ Prateleira</button>
               <button onclick="menuAcao('gav')">➕ Gaveta</button>`
            + (modEstr.colunas[part.col].cab ? '' : `<button onclick="menuAcao('cab')">➕ Cabideiro</button>`);
+  } else if(part.tipo==='lateral' || part.tipo==='tampo' || part.tipo==='base'){
+    const e = engDe();
+    const ligado = part.tipo==='lateral' ? e[part.lado] : e[part.tipo];
+    botoes = `<button onclick="menuAcao('engrosso')">🪵 ${ligado ? 'Tirar engrosso' : 'Engrossar'}</button>
+              <button onclick="menuAcao('ocultar')">👁 Ocultar</button>`;
   } else {
     if(part.tipo==='porta' || part.tipo==='gaveta') botoes += `<button onclick="menuAcao('abrir')">↔ Abrir/fechar</button>`;
+    if(part.tipo==='divisoria'){
+      const ligado = engDe().divs[part.idx];
+      botoes += `<button onclick="menuAcao('engrosso')">🪵 ${ligado ? 'Tirar engrosso' : 'Engrossar'}</button>`;
+    }
     botoes += `<button onclick="menuAcao('ocultar')">👁 Ocultar</button>
                <button onclick="menuAcao('excluir')">🗑 Excluir</button>`;
   }
@@ -1184,6 +1227,11 @@ function menuAcao(acao){
     if(acao==='prat') colPrats(cols[p.col]).push(0.5); // nasce no meio, arrasta depois
     if(acao==='gav')  cols[p.col].gav++;
     if(acao==='cab'){ cols[p.col].cab = true; if(cols[p.col].cabY==null) cols[p.col].cabY = 0.12; }
+  } else if(acao === 'engrosso'){ // liga/desliga a tira dupla na frente da peça
+    const e = engDe();
+    if(p.tipo==='lateral')        e[p.lado] = !e[p.lado];
+    else if(p.tipo==='divisoria') e.divs[p.idx] = !e.divs[p.idx];
+    else                          e[p.tipo] = !e[p.tipo];
   } else if(acao === 'ocultar'){
     camOcultas[p.key] = true; // some da tela, mas continua no preço
   } else if(acao === 'abrir'){
