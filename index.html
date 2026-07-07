@@ -423,13 +423,20 @@ function calcularModulo(m){
   // áreas em MDF 15mm
   let a15 = 2*(A*P) + 2*(L*P) + prat*(L*P);          // laterais + base/tampo + prateleiras
   a15 += nDiv*(A*P);                                  // divisórias verticais
-  if(m.estr && m.estr.eng){                           // engrossos (tira de ~10cm em 15mm)
-    const e = m.estr.eng, tira = 0.1;
-    if(e.latE)  a15 += A*tira;
-    if(e.latD)  a15 += A*tira;
-    if(e.tampo) a15 += L*tira;
-    if(e.base)  a15 += L*tira;
-    a15 += Object.values(e.divs||{}).filter(Boolean).length * A*tira;
+  if(m.estr && m.estr.eng){                           // engrossos (tira de ~8cm em 15mm)
+    const e = m.estr.eng, tira = 0.08;
+    if(e.v2){
+      const nVert = (e['lateral-esq']||[]).length + (e['lateral-dir']||[]).length
+        + Object.values(e.divs||{}).reduce((a,l)=>a+(l?l.length:0), 0);
+      const nHor = (e.tampo||[]).length + (e.base||[]).length;
+      a15 += nVert*A*tira + nHor*L*tira;
+    } else { // formato antigo (módulos salvos antes)
+      if(e.latE)  a15 += A*tira;
+      if(e.latD)  a15 += A*tira;
+      if(e.tampo) a15 += L*tira;
+      if(e.base)  a15 += L*tira;
+      a15 += Object.values(e.divs||{}).filter(Boolean).length * A*tira;
+    }
   }
   if(portas>0) a15 += L*A;                            // frentes (portas)
   a15 += gav*( L*0.2 + 2*(P*0.15) + L*0.15 );        // frente + caixa da gaveta
@@ -549,10 +556,20 @@ function trocarUnidade(){
 
 /* estrutura por colunas: divisórias verticais criam colunas, cada uma com
    suas prateleiras, gavetas e cabideiro — editável peça a peça na câmera */
-function engDe(){ // engrossos do módulo (tira dupla na frente da peça)
-  if(!modEstr.eng) modEstr.eng = {latE:false, latD:false, tampo:false, base:false, divs:{}};
-  if(!modEstr.eng.divs) modEstr.eng.divs = {};
-  return modEstr.eng;
+function engDe(){ // engrossos: listas por peça, cada um com posição (0=frente..1=fundo) e lado
+  let e = modEstr.eng;
+  if(!e || !e.v2){
+    const old = e || {};
+    e = {v2:true, 'lateral-esq':[], 'lateral-dir':[], tampo:[], base:[], divs:{}};
+    if(old.latE)  e['lateral-esq'].push({pos:0.06, lado:'int'});
+    if(old.latD)  e['lateral-dir'].push({pos:0.06, lado:'int'});
+    if(old.tampo) e.tampo.push({pos:0.06, lado:'int'});
+    if(old.base)  e.base.push({pos:0.06, lado:'int'});
+    Object.keys(old.divs||{}).forEach(k=>{ if(old.divs[k]) e.divs[k] = [{pos:0.06, lado:'c'}]; });
+    modEstr.eng = e;
+  }
+  if(!e.divs) e.divs = {};
+  return e;
 }
 function colPrats(c){ // posições das prateleiras (frações 0..1); compatível com modelo antigo
   if(!c.prats){
@@ -843,30 +860,46 @@ function desenhaMovel3D(ctx, W, H){
   };
 
   // construção: passante = atravessa de fora a fora; a outra peça encaixa entre
-  const eng = (m.estr && m.estr.eng) || {divs:{}};
-  const engDivs = eng.divs || {};
+  const engV = (m.estr && m.estr.eng && m.estr.eng.v2) ? m.estr.eng : null;
   const ENG = 8; // profundidade da tira de engrosso (cm)
+  const zEng = s => { const z0 = -hd + (s.pos||0)*(2*hd - ENG); return [z0, z0+ENG]; };
   const yLat1 = -hh + (camConstr.tampo ? t : 0);
   const yLat2 =  hh - (camConstr.base  ? t : 0);
   if(camVis.laterais){
     if(!camOcultas['lateral-esq']){
       add(-hw, -hw+t, yLat1, yLat2, -hd, hd, CORES.ext, {tipo:'lateral', lado:'latE', key:'lateral-esq'});
-      if(eng.latE) add(-hw+t, -hw+2*t, yLat1, yLat2, -hd, -hd+ENG, CORES.ext, {tipo:'lateral', lado:'latE', key:'lateral-esq'});
+      if(engV) engV['lateral-esq'].forEach((s,ei)=>{
+        const [z0,z1] = zEng(s);
+        const x0 = s.lado==='ext' ? -hw-t : -hw+t, x1 = s.lado==='ext' ? -hw : -hw+2*t;
+        add(x0, x1, yLat1, yLat2, z0, z1, CORES.ext, {tipo:'engrosso', grupo:'lateral-esq', idx:ei, key:'eng-le-'+ei});
+      });
     }
     if(!camOcultas['lateral-dir']){
       add( hw-t, hw,  yLat1, yLat2, -hd, hd, CORES.ext, {tipo:'lateral', lado:'latD', key:'lateral-dir'});
-      if(eng.latD) add(hw-2*t, hw-t, yLat1, yLat2, -hd, -hd+ENG, CORES.ext, {tipo:'lateral', lado:'latD', key:'lateral-dir'});
+      if(engV) engV['lateral-dir'].forEach((s,ei)=>{
+        const [z0,z1] = zEng(s);
+        const x0 = s.lado==='ext' ? hw : hw-2*t, x1 = s.lado==='ext' ? hw+t : hw-t;
+        add(x0, x1, yLat1, yLat2, z0, z1, CORES.ext, {tipo:'engrosso', grupo:'lateral-dir', idx:ei, key:'eng-ld-'+ei});
+      });
     }
   }
   const xT1 = camConstr.tampo ? -hw : -hw+t, xT2 = camConstr.tampo ? hw : hw-t;
   const xB1 = camConstr.base  ? -hw : -hw+t, xB2 = camConstr.base  ? hw : hw-t;
   if(camVis.tampo && !camOcultas['tampo']){
     add(xT1, xT2, -hh, -hh+t, -hd, hd, CORES.ext, {tipo:'tampo', key:'tampo'});
-    if(eng.tampo) add(xT1, xT2, -hh+t, -hh+2*t, -hd, -hd+ENG, CORES.ext, {tipo:'tampo', key:'tampo'});
+    if(engV) engV.tampo.forEach((s,ei)=>{
+      const [z0,z1] = zEng(s);
+      const y0 = s.lado==='ext' ? -hh-t : -hh+t, y1 = s.lado==='ext' ? -hh : -hh+2*t;
+      add(xT1, xT2, y0, y1, z0, z1, CORES.ext, {tipo:'engrosso', grupo:'tampo', idx:ei, key:'eng-t-'+ei});
+    });
   }
   if(camVis.base && !camOcultas['base']){
     add(xB1, xB2,  hh-t, hh,  -hd, hd, CORES.ext, {tipo:'base', key:'base'});
-    if(eng.base) add(xB1, xB2, hh-2*t, hh-t, -hd, -hd+ENG, CORES.ext, {tipo:'base', key:'base'});
+    if(engV) engV.base.forEach((s,ei)=>{
+      const [z0,z1] = zEng(s);
+      const y0 = s.lado==='ext' ? hh : hh-2*t, y1 = s.lado==='ext' ? hh+t : hh-t;
+      add(xB1, xB2, y0, y1, z0, z1, CORES.ext, {tipo:'engrosso', grupo:'base', idx:ei, key:'eng-b-'+ei});
+    });
   }
   if(camVis.fundo) add(-hw, hw, -hh, hh, hd-tf, hd, CORES.int);
 
@@ -927,9 +960,10 @@ function desenhaMovel3D(ctx, W, H){
       const key = 'divisoria-'+ci;
       if(!camOcultas[key]){
         add(cx1, cx1+t, -hh+t, hh-t, -hd+0.5, hd-tf, CORES.int, {tipo:'divisoria', idx:ci, key});
-        if(engDivs[ci]){ // engrosso: tira dupla na frente (folga pra porta/dobradiça)
-          add(cx1-t/2, cx1+t*1.5, -hh+t, hh-t, -hd+0.5, -hd+ENG, CORES.ext, {tipo:'divisoria', idx:ci, key});
-        }
+        if(engV && engV.divs[ci]) engV.divs[ci].forEach((s,ei)=>{ // engrossos da divisória
+          const [z0,z1] = zEng(s);
+          add(cx1-t/2, cx1+t*1.5, -hh+t, hh-t, z0, z1, CORES.ext, {tipo:'engrosso', grupo:'div', divIdx:ci, idx:ei, key:'eng-d'+ci+'-'+ei});
+        });
       }
     }
     cxAtual = cx1 + t;
@@ -1189,23 +1223,22 @@ function abrirMenuPeca(part){
   camMenuAlvo = part;
   const nomes = {prateleira:'Prateleira', gaveta:'Gaveta', porta:'Porta', divisoria:'Divisória',
                  cabideiro:'Cabideiro', lateral:'Lateral', tampo:'Tampo', base:'Base',
+                 engrosso:'Engrosso (arraste pra posicionar)',
                  vao:'Coluna '+(part.col+1)+' — espaço vazio'};
   let botoes = '';
   if(part.tipo === 'vao'){
     botoes = `<button onclick="menuAcao('prat')">➕ Prateleira</button>
               <button onclick="menuAcao('gav')">➕ Gaveta</button>`
            + (modEstr.colunas[part.col].cab ? '' : `<button onclick="menuAcao('cab')">➕ Cabideiro</button>`);
+  } else if(part.tipo==='engrosso'){
+    botoes = `<button onclick="menuAcao('excluir')">🗑 Excluir engrosso</button>`;
   } else if(part.tipo==='lateral' || part.tipo==='tampo' || part.tipo==='base'){
-    const e = engDe();
-    const ligado = part.tipo==='lateral' ? e[part.lado] : e[part.tipo];
-    botoes = `<button onclick="menuAcao('engrosso')">🪵 ${ligado ? 'Tirar engrosso' : 'Engrossar'}</button>
+    botoes = `<button onclick="menuAcao('engInt')">🪵 + Engrosso por dentro</button>
+              <button onclick="menuAcao('engExt')">🪵 + Engrosso por fora</button>
               <button onclick="menuAcao('ocultar')">👁 Ocultar</button>`;
   } else {
     if(part.tipo==='porta' || part.tipo==='gaveta') botoes += `<button onclick="menuAcao('abrir')">↔ Abrir/fechar</button>`;
-    if(part.tipo==='divisoria'){
-      const ligado = engDe().divs[part.idx];
-      botoes += `<button onclick="menuAcao('engrosso')">🪵 ${ligado ? 'Tirar engrosso' : 'Engrossar'}</button>`;
-    }
+    if(part.tipo==='divisoria') botoes += `<button onclick="menuAcao('engDiv')">🪵 + Engrosso</button>`;
     botoes += `<button onclick="menuAcao('ocultar')">👁 Ocultar</button>
                <button onclick="menuAcao('excluir')">🗑 Excluir</button>`;
   }
@@ -1227,11 +1260,13 @@ function menuAcao(acao){
     if(acao==='prat') colPrats(cols[p.col]).push(0.5); // nasce no meio, arrasta depois
     if(acao==='gav')  cols[p.col].gav++;
     if(acao==='cab'){ cols[p.col].cab = true; if(cols[p.col].cabY==null) cols[p.col].cabY = 0.12; }
-  } else if(acao === 'engrosso'){ // liga/desliga a tira dupla na frente da peça
+  } else if(acao === 'engInt' || acao === 'engExt'){ // novo engrosso na peça (nasce na frente)
     const e = engDe();
-    if(p.tipo==='lateral')        e[p.lado] = !e[p.lado];
-    else if(p.tipo==='divisoria') e.divs[p.idx] = !e.divs[p.idx];
-    else                          e[p.tipo] = !e[p.tipo];
+    const grupo = p.tipo==='lateral' ? (p.lado==='latE' ? 'lateral-esq' : 'lateral-dir') : p.tipo;
+    e[grupo].push({pos:0.02, lado: acao==='engExt' ? 'ext' : 'int'});
+  } else if(acao === 'engDiv'){ // novo engrosso na divisória
+    const e = engDe();
+    (e.divs[p.idx] = e.divs[p.idx] || []).push({pos:0.02, lado:'c'});
   } else if(acao === 'ocultar'){
     camOcultas[p.key] = true; // some da tela, mas continua no preço
   } else if(acao === 'abrir'){
@@ -1239,6 +1274,11 @@ function menuAcao(acao){
     alvo[p.anim] = alvo[p.anim] ? 0 : 1;
     iniciarAnim();
   } else if(acao === 'excluir'){ // sai da tela E do preço
+    if(p.tipo==='engrosso'){
+      const e = engDe();
+      const lista = p.grupo==='div' ? (e.divs[p.divIdx]||[]) : e[p.grupo];
+      lista.splice(p.idx, 1);
+    }
     if(p.tipo==='prateleira') colPrats(cols[p.col]).splice(p.idx, 1); // exclui AQUELA prateleira
     if(p.tipo==='gaveta')     cols[p.col].gav  = Math.max(0, cols[p.col].gav-1);
     if(p.tipo==='cabideiro')  cols[p.col].cab  = false;
@@ -1317,6 +1357,15 @@ camCv.addEventListener('pointerdown', e=>{
         if(p.tipo==='cabideiro')  camDrag.v0 = (cols[p.col].cabY==null ? 0.12 : cols[p.col].cabY);
         if(p.tipo==='divisoria'){ camDrag.w0 = cols[p.idx].w||0.5; camDrag.w1 = cols[p.idx+1].w||0.5; }
         if(p.tipo==='porta' || p.tipo==='gaveta') camDrag.a0 = camAnim[p.tipo+'s'][p.anim]||0;
+        if(p.tipo==='engrosso'){
+          const e = engDe();
+          const lista = p.grupo==='div' ? (e.divs[p.divIdx]||[]) : e[p.grupo];
+          camDrag.v0 = lista[p.idx] ? (lista[p.idx].pos||0) : 0;
+          // direção da profundidade na tela (pra onde 1cm de fundo aponta em pixels)
+          const cx = innerWidth/2 + cam3d.x, cy = innerHeight/2 + cam3d.y;
+          const a = projetar(0,0,0,camS,cx,cy), b = projetar(0,0,10,camS,cx,cy);
+          camDrag.zv = {x:(b.x-a.x)/10, y:(b.y-a.y)/10};
+        }
       }
     }
     if(camDrag.mode==='pending'){
@@ -1364,6 +1413,15 @@ camCv.addEventListener('pointermove', e=>{
       const dFr = (dy/camS) / Math.max(1, m.A);
       cols[p.col].cabY = Math.min(0.9, Math.max(0.04, camDrag.v0 + dFr)); // sobe/desce
       camDrag.gx = dx/(camS*cosR); // e segue o dedo pro lado (troca de coluna)
+    } else if(p.tipo==='engrosso'){ // desliza da frente pro fundo
+      const e = engDe();
+      const lista = p.grupo==='div' ? (e.divs[p.divIdx]||[]) : e[p.grupo];
+      const s = lista[p.idx];
+      if(s){
+        const V = camDrag.zv || {x:0, y:1};
+        const dz = (dx*V.x + dy*V.y) / ((V.x*V.x + V.y*V.y) || 1); // cm de profundidade
+        s.pos = Math.min(1, Math.max(0, camDrag.v0 + dz/Math.max(1, m.P-8)));
+      }
     } else if(p.tipo==='gaveta'){
       camDrag.gx = dx/(camS*cosR); // gaveta segue o dedo (fantasma)
       camDrag.gy = dy/camS;
