@@ -371,6 +371,7 @@
         <label class="cv"><input type="checkbox" id="ccLat" checked onchange="camConstrLat(this.checked)">Laterais passantes</label>
         <label class="cv"><input type="checkbox" id="ccTampo" onchange="camConstrSet('tampo',this.checked)">Tampo passante</label>
         <label class="cv"><input type="checkbox" id="ccBase" onchange="camConstrSet('base',this.checked)">Base passante</label>
+        <label class="cv"><input type="checkbox" id="ccSemFundo" onchange="camSemFundo(this.checked)">Sem fundo (fixa na parede)</label>
       </div>
     </div>
   </div>
@@ -530,7 +531,7 @@ function calcularModulo(m){
 
   for(let i=0;i<portas;i++) addArea(espP('porta-'+i, espCorpo), (L/Math.max(1,portas))*A); // portas
   addArea(espCorpo, gav*( L*0.2 + 2*(P*0.15) + L*0.15 ));  // caixa das gavetas
-  addArea(espP('fundo', espFundo), L*A);                    // fundo do móvel
+  if(!(m.estr && m.estr.semFundo)) addArea(espP('fundo', espFundo), L*A); // fundo do móvel
   addArea(espGav, gav*(L*P));                               // fundo das gavetas
 
   const perda = Number(db.config.perda)||1.2;
@@ -1088,7 +1089,7 @@ function desenhaMovel3D(ctx, W, H){
       add(xB1, xB2, y0, y1, z0, z1, CORES.ext, {tipo:'engrosso', grupo:'base', idx:ei, key:'eng-b-'+ei});
     });
   }
-  if(camVis.fundo) add(-hw, hw, -hh, hh, hd-tf, hd, CORES.int);
+  if(camVis.fundo && !(m.estr && m.estr.semFundo)) add(-hw, hw, -hh, hh, hd-tf, hd, CORES.int, {tipo:'fundo', key:'fundo'});
 
   // interior por colunas (larguras livres; prateleiras em posições livres)
   camS = s; // escala px/cm do último desenho — usada pra converter arrasto do dedo
@@ -1273,6 +1274,7 @@ async function abrirCamera(){
   document.getElementById('btnEditar').style.background = 'rgba(255,255,255,.15)';
   document.getElementById('camLabel').textContent = '👆 Toque na porta/gaveta = abre · 🖐 arraste = girar · ✊ segure = mover';
   document.querySelectorAll('.camvis').forEach(c=> c.checked = true);
+  const sf = document.getElementById('ccSemFundo'); if(sf) sf.checked = !!(modEstr && modEstr.semFundo);
   syncConstrUI();
   document.getElementById('camScale').value = 1;
   atualizarPrecoCam();
@@ -1301,6 +1303,7 @@ function camVisSet(k, v){ camVis[k] = v; renderCam(); }
 /* construção: laterais/tampo/base passante
    cada canto tem um dono: se o tampo não passa, a lateral passa (e vice-versa) */
 function camConstrSet(k, v){ camConstr[k] = v; syncConstrUI(); renderCam(); }
+function camSemFundo(v){ if(modEstr){ modEstr.semFundo = v; } atualizarPrecoCam(); renderCam(); }
 function camConstrLat(v){
   // marcar laterais passantes = tampo e base encaixados; desmarcar = os dois passantes
   camConstr.tampo = !v; camConstr.base = !v;
