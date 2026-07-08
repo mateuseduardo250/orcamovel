@@ -277,6 +277,9 @@
         <option value="dobradica">Dobradiça</option>
         <option value="corredica">Corrediça</option>
         <option value="puxador">Puxador</option>
+        <option value="trilho">Trilho</option>
+        <option value="roldana">Roldana</option>
+        <option value="pistao">Pistão</option>
         <option value="chapa">Chapa</option>
         <option value="fita">Fita</option>
         <option value="formica">Fórmica</option>
@@ -430,6 +433,8 @@ const MATERIAIS_PADRAO = [
   {id:'cola',     nome:'Cola (galão)',                 un:'galão',  preco:50},
   {id:'tubo',     nome:'Tubo cabideiro',               un:'metro',  preco:18},
   {id:'trilho',   nome:'Trilho porta de correr',       un:'metro',  preco:40},
+  {id:'roldana',  nome:'Roldana porta de correr',      un:'unidade',preco:15},
+  {id:'pistao',   nome:'Pistão a gás',                 un:'unidade',preco:22},
 ];
 const TIPOS = {
   aereo:   {nome:'Armário aéreo',        L:120, A:70,  P:35, portas:2, gav:0, prat:1, divs:0},
@@ -453,6 +458,8 @@ if(!db.materiais.find(x=>x.id==='trilho')){ // migração: porta de correr
 }
 [['chapa3','Chapa MDF 3mm',120],['chapa18','Chapa MDF 18mm',360],['chapa25','Chapa MDF 25mm',480]]
   .forEach(([id,nome,preco])=>{ if(!db.materiais.find(x=>x.id===id)) db.materiais.push({id,nome,un:'chapa',preco}); });
+[['roldana','Roldana porta de correr','unidade',15,'roldana'],['pistao','Pistão a gás','unidade',22,'pistao']]
+  .forEach(([id,nome,un,preco,cat])=>{ if(!db.materiais.find(x=>x.id===id)) db.materiais.push({id,nome,un,preco,cat}); });
 
 let projetoAtual = null;      // índice em db.projetos
 let modoCliente = false;
@@ -546,19 +553,25 @@ function calcularModulo(m){
   const correr = (m.portaTipo==='correr' && portas>0);
   const dobr = correr ? 0 : portas * (m.A>160 ? 3 : 2); // porta de correr não usa dobradiça
   const trilhoM = correr ? L*2 : 0;                      // trilho superior + inferior
+  const roldanas = correr ? 2*portas : 0;                // ~2 rodinhas por porta de correr
+  const pistoes = (m.estr && m.estr.pistao && !correr) ? portas : 0; // pistão nas portas (opção)
   const corr = gav;                       // pares
   const pux  = portas + gav;
   const parafCentos = 0.3;                // ~30 parafusos por módulo
 
   const modelo = (m.estr && m.estr.modelo) || {};
-  const idDobr = modelo.dobradica || 'dobradica';
-  const idCorr = modelo.corredica || 'corredica';
-  const idPux  = modelo.puxador   || 'puxador';
+  const idDobr    = modelo.dobradica || 'dobradica';
+  const idCorr    = modelo.corredica || 'corredica';
+  const idPux     = modelo.puxador   || 'puxador';
+  const idTrilho  = modelo.trilho    || 'trilho';
+  const idRoldana = modelo.roldana   || 'roldana';
+  const idPistao  = modelo.pistao    || 'pistao';
   const custo =
     custoChapa +
     fita*precoDe('fita') + dobr*precoDe(idDobr) +
     corr*precoDe(idCorr) + pux*precoDe(idPux) +
-    parafCentos*precoDe('parafuso') + cabM*precoDe('tubo') + trilhoM*precoDe('trilho');
+    parafCentos*precoDe('parafuso') + cabM*precoDe('tubo') +
+    trilhoM*precoDe(idTrilho) + roldanas*precoDe(idRoldana) + pistoes*precoDe(idPistao);
 
   return {chapas:totChapas, chapasPorEsp, fita:Math.round(fita*10)/10, dobr, corr, pux, custo};
 }
@@ -812,11 +825,11 @@ function toggleModoCliente(){
 }
 
 /* ================== MATERIAIS ================== */
-const CAT_NOME = {chapa:'Chapa', dobradica:'Dobradiça', corredica:'Corrediça', puxador:'Puxador', fita:'Fita', formica:'Fórmica', outro:'Outro'};
+const CAT_NOME = {chapa:'Chapa', dobradica:'Dobradiça', corredica:'Corrediça', puxador:'Puxador', trilho:'Trilho', roldana:'Roldana', pistao:'Pistão', fita:'Fita', formica:'Fórmica', outro:'Outro'};
 function matCat(m){
   if(m.cat) return m.cat;
   if(m.id && m.id.startsWith('chapa')) return 'chapa';
-  if(['dobradica','corredica','puxador','fita'].includes(m.id)) return m.id;
+  if(['dobradica','corredica','puxador','fita','trilho'].includes(m.id)) return m.id;
   return 'outro';
 }
 function renderMateriais(){
@@ -1177,6 +1190,9 @@ function desenhaMovel3D(ctx, W, H){
       add(x1, x2, -hh+0.6, hh-0.6, trilhoZ, trilhoZ+t, CORES.ext, part, mov);
       const px = frente ? x2-2 : x1+2; // puxador vertical na borda interna
       add(px-1, px+1, -8, 8, trilhoZ-1.2, trilhoZ, CORES.escuro, part, mov);
+      // roldanas (rodinhas) no pé da porta, tocáveis pra escolher o modelo
+      const rpart = {tipo:'roldana', idx:i, key:'roldana-'+i};
+      [x1+3, x2-3].forEach(wx=> add(wx-2, wx+2, hh-2.5, hh+0.6, trilhoZ, trilhoZ+t, CORES.escuro, rpart, mov));
     }
   } else if(camVis.portas && m.portas>0){               // portas de giro (dobradiça)
     for(let i=0;i<m.portas;i++){
@@ -1453,6 +1469,7 @@ function abrirMenuPeca(part){
   camMenuAlvo = part;
   if(part.tipo==='dobradica'){ mostrarModelos('dobradica', 'Modelo da dobradiça'); return; }
   if(part.tipo==='corredica'){ mostrarModelos('corredica', 'Modelo da corrediça'); return; }
+  if(part.tipo==='roldana'){   mostrarModelos('roldana',   'Modelo da roldana'); return; }
   const nomes = {prateleira:'Prateleira', gaveta:'Gaveta', porta:'Porta', divisoria:'Divisória',
                  cabideiro:'Cabideiro', lateral:'Lateral', tampo:'Tampo', base:'Base',
                  engrosso:'Engrosso (arraste pra posicionar)',
@@ -1509,6 +1526,10 @@ function menuMovel(){
      <button onclick="mostrarModelos('puxador','Modelo do puxador')">🔩 Puxador</button>
      <button onclick="mostrarModelos('dobradica','Modelo da dobradiça')">🔩 Dobradiça</button>
      <button onclick="mostrarModelos('corredica','Modelo da corrediça')">🔩 Corrediça</button>
+     <button onclick="mostrarModelos('trilho','Modelo do trilho')">🔩 Trilho</button>
+     <button onclick="mostrarModelos('roldana','Modelo da roldana')">🔩 Roldana</button>
+     <button onclick="mostrarModelos('pistao','Modelo do pistão')">🔩 Pistão</button>
+     <button onclick="menuAcao('togglePistao')">${(modEstr.pistao?'☑':'☐')} Pistão nas portas</button>
      <button onclick="fecharMenuPeca()">✕ Fechar</button>`;
   document.getElementById('camMenu').style.display = 'block';
 }
@@ -1606,6 +1627,7 @@ function menuAcao(acao){
   if(acao==='corMovel'){ mostrarSwatches('Cor do móvel',   {tipo:'corMovel'},  false); return; }
   if(acao==='fitaTudo'){ mostrarSwatches('Cor da fita',     {tipo:'fitaTudo'},  true);  return; }
   if(acao==='semFita'){ modEstr.fitaAll=null; modEstr.fitas={}; atualizarPrecoCam(); renderCam(); fecharMenuPeca(); return; }
+  if(acao==='togglePistao'){ modEstr.pistao = !modEstr.pistao; atualizarPrecoCam(); menuMovel(); return; }
   if(acao==='esp'){      mostrarEspessuras('Espessura da peça', {tipo:'espPeca', key:p.key}); return; }
   if(acao==='espCorpo'){ mostrarEspessuras('Chapa do corpo',    {tipo:'espCorpo'}); return; }
   if(acao==='espFundo'){ mostrarEspessuras('Chapa do fundo',    {tipo:'espFundo'}); return; }
