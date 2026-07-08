@@ -1024,7 +1024,10 @@ function desenhaMovel3D(ctx, W, H){
         else if(part.tipo==='porta'){                          // porta: fita nas QUINAS (espessura)
           if(!f.frente && !f.tras) f.c = fc;                  // lados + topo + base
         }
-        else if(part.tipo==='gaveta'){ if(f.frente) f.fita = fc; } // gaveta: contorno da frente
+        else if(part.tipo==='gaveta' && part.gavPart!=='bottom'){ // gaveta: boca (rim) + frente
+          if(f.topo) f.c = fc;                                    // topo das paredes = boca fitada
+          if(f.frente && part.gavPart==='front') f.fita = fc;     // contorno da frente
+        }
       });
     }
     faces.push(...fs);
@@ -1117,10 +1120,18 @@ function desenhaMovel3D(ctx, W, H){
         const gx = seg ? (camDrag.gx||0) : 0, gy = seg ? (camDrag.gy||0) : 0;
         const off = seg ? 8 : (camAnim.gavetas[anim]||0) * Math.min(35, m.P*0.6);
         const mov = p=>[p[0]+gx, p[1]+gy, p[2]-off];
-        const part = {tipo:'gaveta', col:ci, key, anim};
-        const prof = Math.min(30, m.P*0.8);
-        add(cx0+1, cx1-1, yt, yb, -hd, -hd + prof, CORES.ext, part, mov);
-        add(cmeio-6, cmeio+6, (yt+yb)/2-1, (yt+yb)/2+1, -hd-1.5, -hd, CORES.escuro, part, mov); // puxador
+        const prof = Math.min(30, m.P*0.8), wl = 1.2; // profundidade e espessura da parede
+        const x0 = cx0+1, x1c = cx1-1;
+        const front = {tipo:'gaveta', col:ci, key, anim, gavPart:'front'};
+        const wall  = {tipo:'gaveta', col:ci, key, anim, gavPart:'wall'};
+        const bott  = {tipo:'gaveta', col:ci, key, anim, gavPart:'bottom'};
+        // caixa ABERTA: frente + 2 laterais + trás + fundo (dá pra fitar a boca)
+        add(x0, x1c, yt, yb, -hd-0.5, -hd+wl, CORES.ext, front, mov);          // frente (face visível)
+        add(x0, x0+wl, yt, yb, -hd, -hd+prof, CORES.ext, wall, mov);           // parede esquerda
+        add(x1c-wl, x1c, yt, yb, -hd, -hd+prof, CORES.ext, wall, mov);         // parede direita
+        add(x0, x1c, yt, yb, -hd+prof-wl, -hd+prof, CORES.ext, wall, mov);     // parede de trás
+        add(x0, x1c, yb-wl, yb, -hd, -hd+prof, CORES.int, bott, mov);          // fundo da gaveta
+        add(cmeio-6, cmeio+6, (yt+yb)/2-1, (yt+yb)/2+1, -hd-2, -hd-0.5, CORES.escuro, front, mov); // puxador
         // corrediças (uma de cada lado), tocáveis pra escolher o modelo
         const cym = (yt+yb)/2, cpart = {tipo:'corredica', col:ci, idx:i, key:'corredica-'+ci+'-'+i};
         add(cx0-1, cx0+0.5, cym-1.6, cym+1.6, -hd+3, -hd+prof, CORES.escuro, cpart, mov);
