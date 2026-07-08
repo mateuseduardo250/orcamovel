@@ -970,10 +970,10 @@ function fitaDe(key){
 function boxFaces(x1,x2,y1,y2,z1,z2,cor){
   const P = [[x1,y1,z1],[x2,y1,z1],[x2,y2,z1],[x1,y2,z1],[x1,y1,z2],[x2,y1,z2],[x2,y2,z2],[x1,y2,z2]];
   return [
-    {i:[0,1,2,3], c:cor.frente, frente:true}, {i:[5,4,7,6], c:cor.tras},
+    {i:[0,1,2,3], c:cor.frente, frente:true}, {i:[5,4,7,6], c:cor.tras, tras:true},
     {i:[4,0,3,7], c:cor.lado},   {i:[1,5,6,2], c:cor.lado},
     {i:[4,5,1,0], c:cor.topo, topo:true},   {i:[3,2,6,7], c:cor.base},
-  ].map(f=>({pts:f.i.map(ix=>P[ix]), c:f.c, frente:f.frente, topo:f.topo}));
+  ].map(f=>({pts:f.i.map(ix=>P[ix]), c:f.c, frente:f.frente, topo:f.topo, tras:f.tras}));
 }
 
 function desenhaMovel3D(ctx, W, H){
@@ -998,9 +998,10 @@ function desenhaMovel3D(ctx, W, H){
       fs.forEach(f=>{
         f.part = part;
         if(!fc) return;
-        if(tabua && f.frente) f.c = fc;                       // borda da tábua = fita cheia
-        else if(part.tipo==='gaveta' && (f.frente || f.topo)) f.fita = fc; // gaveta: frente + rim de cima
-        else if(part.tipo==='porta' && f.frente) f.fita = fc; // porta: contorno da frente
+        if(tabua){ if(f.frente) f.c = fc; }                   // tábua: a face frontal É a borda → preenche
+        else if(part.tipo==='porta' || part.tipo==='gaveta'){ // painel: fita nas QUINAS (espessura)
+          if(!f.frente && !f.tras) f.c = fc;                  // lados + topo + base = as bordas
+        }
       });
     }
     faces.push(...fs);
