@@ -115,11 +115,31 @@
     #orcDoc{position:absolute; top:0; left:0; width:100%; border:none;}
   }
 </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/orcamovel/premium.css">
 </head>
 <body>
 
+<svg class="icon-sprite" aria-hidden="true" focusable="false">
+  <symbol id="icon-hammer" viewBox="0 0 24 24"><path d="M14.7 4.4 12.9 2.6l-3 3 1.7 1.7-8.1 8.1a2.2 2.2 0 0 0 0 3.1l.1.1a2.2 2.2 0 0 0 3.1 0l8.1-8.1 1.8 1.8 3-3-1.8-1.8 1.2-1.2 2.1.1.9-.9-3.6-3.6-.9.9.1 2.1-1.2 1.2Zm-9.6 12.7 8.1-8.1 1.1 1.1-8.1 8.1a.75.75 0 0 1-1.1 0 .75.75 0 0 1 0-1.1Z"/></symbol>
+  <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 19 19H5.5A2.5 2.5 0 0 1 3 16.5v-9Zm2.5-.4a.4.4 0 0 0-.4.4v1.2h14.8a.4.4 0 0 0-.4-.4h-8.6l-2-2H5.5Zm-.4 3.4v6a.4.4 0 0 0 .4.4H19a.4.4 0 0 0 .4-.4v-6H5.1Z"/></symbol>
+  <symbol id="icon-tools" viewBox="0 0 24 24"><path d="M13.2 5.1a4.4 4.4 0 0 0-5.4 5.8l-5 5a2.5 2.5 0 0 0 3.5 3.5l5-5a4.4 4.4 0 0 0 5.7-5.4l-2.9 2.9-2-2L15 7l-1.8-1.9ZM4.4 17.5l5.9-5.9.9.9-5.9 5.9a.65.65 0 0 1-.9-.9Zm11.9-9.2-1.1 1.1 1.1 1.1 1.1-1.1-1.1-1.1Z"/></symbol>
+  <symbol id="icon-receipt" viewBox="0 0 24 24"><path d="M6 3.5h12a1.5 1.5 0 0 1 1.5 1.5v15.7l-2.4-1.2-2.3 1.2-2.3-1.2-2.3 1.2-2.3-1.2-2.4 1.2V5A1.5 1.5 0 0 1 6 3.5Zm1.6 3.2v10.6l.7-.4 2.3 1.2 2.3-1.2 2.3 1.2 2.3-1.2.7.4V6.7H7.6Zm2 2.5h6.8v1.8H9.6V9.2Zm0 3.5h5.2v1.8H9.6v-1.8Z"/></symbol>
+  <symbol id="icon-gear" viewBox="0 0 24 24"><path d="m10.2 2.8-.5 2.1a7.2 7.2 0 0 0-1.3.8l-2-.8-2 3.5 1.7 1.3a7 7 0 0 0 0 1.6l-1.7 1.3 2 3.5 2-.8c.4.3.8.6 1.3.8l.5 2.1h4l.5-2.1c.5-.2.9-.5 1.3-.8l2 .8 2-3.5-1.7-1.3a7 7 0 0 0 0-1.6l1.7-1.3-2-3.5-2 .8c-.4-.3-.8-.6-1.3-.8l-.5-2.1h-4Zm2 6.1a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z"/></symbol>
+  <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M10.5 4.5h3v6h6v3h-6v6h-3v-6h-6v-3h6v-6Z"/></symbol>
+  <symbol id="icon-camera" viewBox="0 0 24 24"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v8.5A2.5 2.5 0 0 1 19 19H5a2.5 2.5 0 0 1-2.5-2.5V8A2.5 2.5 0 0 1 5 5.5h3.5ZM12 9a3.8 3.8 0 1 0 0 7.6A3.8 3.8 0 0 0 12 9Zm0 2.1a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4Z"/></symbol>
+  <symbol id="icon-cube" viewBox="0 0 24 24"><path d="m12 2.8 8.5 4.7v9L12 21.2l-8.5-4.7v-9L12 2.8Zm0 2.6L6.3 8.5 12 11.7l5.7-3.2L12 5.4Zm-6.1 5.1v4.6l4.9 2.7v-4.7l-4.9-2.6Zm12.2 0-4.9 2.6v4.7l4.9-2.7v-4.6Z"/></symbol>
+  <symbol id="icon-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6V3Zm7 1.9V8h3.1L13 4.9ZM8.2 11h7.6v1.8H8.2V11Zm0 3.4h7.6v1.8H8.2v-1.8Z"/></symbol>
+  <symbol id="icon-phone" viewBox="0 0 24 24"><path d="M6.7 3.5h3.1l1 4-1.9 1.4c1.1 2.2 2.8 3.9 5 5l1.4-1.9 4 1v3.1c0 1.6-1.3 2.8-2.9 2.6C9.2 18 4 12.8 3.3 5.6 3.1 4.1 4.8 3.5 6.7 3.5Z"/></symbol>
+  <symbol id="icon-print" viewBox="0 0 24 24"><path d="M7 3.5h10v5H7v-5Zm-2 6.8h14a2.5 2.5 0 0 1 2.5 2.5v4.7H18V21H6v-3.5H2.5v-4.7A2.5 2.5 0 0 1 5 10.3Zm3.1 6.2v2.4h7.8v-2.4H8.1Zm10.2-3.2a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/></symbol>
+  <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M8.5 4.5 9.5 3h5l1 1.5H20v2.3H4V4.5h4.5ZM6 8h12l-.8 12H6.8L6 8Zm3.2 2.2.4 7.3h1.8l-.3-7.3H9.2Zm3.7 0-.3 7.3h1.8l.4-7.3h-1.9Z"/></symbol>
+  <symbol id="icon-chair" viewBox="0 0 24 24"><path d="M8 3.5h8a1.8 1.8 0 0 1 1.8 1.8v6.2H6.2V5.3A1.8 1.8 0 0 1 8 3.5Zm-2 10h12v2.4H6v-2.4Zm1 3.7h2.2l-.7 3.3H6.3l.7-3.3Zm7.8 0H17l.7 3.3h-2.2l-.7-3.3Z"/></symbol>
+</svg>
+
 <header>
-  <span class="logo">🔨</span>
+  <span class="logo icon-tile icon-logo" aria-hidden="true"><svg class="app-icon"><use href="#icon-hammer"></use></svg></span>
   <div>
     <h1>Orçamóvel</h1>
     <small>o orçamento nasce na frente do cliente</small>
@@ -130,9 +150,20 @@
 
   <!-- ============ PROJETOS ============ -->
   <section id="tab-projetos" class="show">
+    <div class="atelier-hero" role="img" aria-label="Marcenaria premium com medição de móvel sob medida">
+      <div class="hero-copy">
+        <span class="eyebrow">Orçamóvel</span>
+        <h2>Marcenaria sob medida, preço fechado na hora</h2>
+        <p>Projetos com acabamento, custo e margem em ordem antes do primeiro corte.</p>
+      </div>
+      <div class="hero-stats">
+        <span><b>3D</b> no ambiente</span>
+        <span><b>R$</b> ao vivo</span>
+      </div>
+    </div>
     <h2>Meus projetos</h2>
     <div id="listaProjetos"></div>
-    <button class="btn" onclick="novoProjeto()">➕ Novo projeto</button>
+    <button class="btn icon-btn" onclick="novoProjeto()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-plus"></use></svg></span>Novo projeto</button>
   </section>
 
   <!-- ============ PROJETO ATUAL ============ -->
@@ -141,6 +172,16 @@
       <label>Nome do cliente / projeto</label>
       <input id="pCliente" placeholder="Ex.: Cozinha da Dona Maria" oninput="salvarProjetoAtual()">
     </div>
+
+    <!-- barra de preço vivo -->
+    <div id="barraPreco">
+      <div>
+        <div class="custo" id="bpCusto">Material: R$ 0</div>
+        <div class="final" id="bpFinal">R$ 0</div>
+      </div>
+      <button class="olho" id="bpOlho" onclick="toggleModoCliente()">👁 modo cliente</button>
+    </div>
+
 
     <h2>Módulos do móvel</h2>
     <div id="listaModulos"></div>
@@ -191,12 +232,12 @@
       <label style="display:flex; align-items:center; gap:6px; font-weight:400; margin-top:8px;">
         <input type="checkbox" id="parInc" style="width:auto;"> Incluir parede de referência no AR (grade de 50cm)
       </label>
-      <button class="btn claro" onclick="abrirCamera()">📷 Ver no ambiente — "holograma"</button>
-      <button class="btn claro" onclick="abrirAR()">🥽 Modo VR — fixar móveis no quarto (beta)</button>
-      <button class="btn" onclick="addModulo()">➕ Adicionar ao projeto</button>
+      <button class="btn claro icon-btn" onclick="abrirCamera()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-camera"></use></svg></span>Ver no ambiente — "holograma"</button>
+      <button class="btn claro icon-btn" onclick="abrirAR()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-cube"></use></svg></span>Modo VR — fixar móveis no quarto (beta)</button>
+      <button class="btn icon-btn" onclick="addModulo()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-plus"></use></svg></span>Adicionar ao projeto</button>
     </div>
 
-    <button class="btn verde" onclick="verOrcamento()">📄 Gerar orçamento</button>
+    <button class="btn verde icon-btn" onclick="verOrcamento()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-file"></use></svg></span>Gerar orçamento</button>
     <button class="btn claro" onclick="mostrarTab('projetos')">← Voltar aos projetos</button>
   </section>
 
@@ -204,8 +245,8 @@
   <section id="tab-orcamento">
     <h2>Orçamento</h2>
     <div id="orcDoc"></div>
-    <button class="btn verde" onclick="enviarWhats()">📲 Enviar no WhatsApp</button>
-    <button class="btn claro" onclick="window.print()">🖨️ Imprimir / salvar PDF</button>
+    <button class="btn verde icon-btn" onclick="enviarWhats()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-phone"></use></svg></span>Enviar no WhatsApp</button>
+    <button class="btn claro icon-btn" onclick="window.print()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-print"></use></svg></span>Imprimir / salvar PDF</button>
     <button class="btn claro" onclick="mostrarTab('projeto')">← Voltar ao projeto</button>
   </section>
 
@@ -230,7 +271,7 @@
         </div>
         <div><label>Preço R$</label><input id="nmPreco" type="number" step="0.5" placeholder="0,00"></div>
       </div>
-      <button class="btn" onclick="addMaterial()">➕ Adicionar material</button>
+      <button class="btn icon-btn" onclick="addMaterial()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-plus"></use></svg></span>Adicionar material</button>
       <p class="muted" style="margin-top:8px;">A calculadora usa os itens básicos (chapas, fita, dobradiça, corrediça, puxador, parafuso). Os materiais que você adicionar viram sua tabela de preços por loja — pra comparar e não esquecer preço.</p>
     </div>
   </section>
@@ -262,7 +303,7 @@
       <input id="cValidade" type="number" value="10" oninput="salvarConfig()">
     </div>
     <div class="card">
-      <button class="btn vermelho" onclick="zerarTudo()">🗑️ Apagar todos os dados</button>
+      <button class="btn vermelho icon-btn" onclick="zerarTudo()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-trash"></use></svg></span>Apagar todos os dados</button>
     </div>
   </section>
 
@@ -343,21 +384,12 @@
   </div>
 </div>
 
-<!-- barra de preço vivo -->
-<div id="barraPreco">
-  <div>
-    <div class="custo" id="bpCusto">Material: R$ 0</div>
-    <div class="final" id="bpFinal">R$ 0</div>
-  </div>
-  <button class="olho" id="bpOlho" onclick="toggleModoCliente()">👁 modo cliente</button>
-</div>
-
 <!-- navegação -->
 <nav class="tabs">
-  <button id="nav-projetos" class="active" onclick="mostrarTab('projetos')"><span class="ic">📁</span>Projetos</button>
-  <button id="nav-projeto" onclick="mostrarTab('projeto')"><span class="ic">🛠️</span>Montar</button>
-  <button id="nav-materiais" onclick="mostrarTab('materiais')"><span class="ic">🧾</span>Materiais</button>
-  <button id="nav-config" onclick="mostrarTab('config')"><span class="ic">⚙️</span>Config</button>
+  <button id="nav-projetos" class="active" onclick="mostrarTab('projetos')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-folder"></use></svg></span>Projetos</button>
+  <button id="nav-projeto" onclick="mostrarTab('projeto')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-tools"></use></svg></span>Montar</button>
+  <button id="nav-materiais" onclick="mostrarTab('materiais')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-receipt"></use></svg></span>Materiais</button>
+  <button id="nav-config" onclick="mostrarTab('config')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-gear"></use></svg></span>Config</button>
 </nav>
 
 <script>
@@ -495,7 +527,7 @@ function mostrarTab(t){
 function renderProjetos(){
   const el = document.getElementById('listaProjetos');
   if(db.projetos.length===0){
-    el.innerHTML = '<div class="vazio"><span class="ic">🪑</span>Nenhum projeto ainda.<br>Toque em <b>Novo projeto</b> e monte o primeiro móvel na frente do cliente.</div>';
+    el.innerHTML = '<div class="vazio"><span class="empty-ico icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-chair"></use></svg></span>Nenhum projeto ainda.<br>Toque em <b>Novo projeto</b> e monte o primeiro móvel na frente do cliente.</div>';
     return;
   }
   el.innerHTML = db.projetos.map((p,i)=>{
@@ -919,6 +951,9 @@ function desenhaMovel3D(ctx, W, H){
       const zv = hd - tf - 0.5;
       faces.push({pts:[[cx0,-hh+t,zv],[cx1,-hh+t,zv],[cx1,hh-t,zv],[cx0,hh-t,zv]],
                   c:'#000', part:{tipo:'vao', col:ci}, invisivel:true});
+      // área de SOLTAR no plano da FRENTE (onde o dedo está) — corrige o drop com móvel girado
+      faces.push({pts:[[cx0,-hh+t,-hd],[cx1,-hh+t,-hd],[cx1,hh-t,-hd],[cx0,hh-t,-hd]],
+                  c:'#000', part:{tipo:'vaoDrop', col:ci}, invisivel:true});
     }
 
     const arrastada = (tipo, idxOuAnim)=> camDrag && camDrag.mode==='peca' && camDrag.part
@@ -970,18 +1005,22 @@ function desenhaMovel3D(ctx, W, H){
   });
 
   if(camVis.portas && m.portas>0 && m.portaTipo==='correr'){ // portas de correr (trilhos)
-    const pw = (2*hw)/m.portas;
+    const slice = (2*hw)/m.portas, ov = 3; // sobreposição pra não deixar vão
     for(let i=0;i<m.portas;i++){
       const key = 'porta-'+i;
       if(camOcultas[key]) continue;
-      const x1 = -hw + i*pw + 0.3, x2 = -hw + (i+1)*pw - 0.3 + (m.portas>1 ? 3 : 0); // leve sobreposição
-      const trilhoZ = (i%2===0) ? -hd - t : -hd - 2.3*t; // trilho da frente / de trás
-      const dir = (i%2===0) ? 1 : -1;
-      const sx = dir * (camAnim.portas[i]||0) * pw * 0.9; // desliza pro lado
+      const frente = (i%2===0);
+      // porta cobre sua fatia + sobreposição, encostando na borda do móvel (sem gap)
+      let x1, x2;
+      if(frente){ x1 = -hw + i*slice; x2 = x1 + slice + ov; }
+      else { x2 = -hw + (i+1)*slice; x1 = x2 - slice - ov; }
+      const trilhoZ = frente ? -hd - t : -hd - 2.3*t; // trilho da frente / de trás
+      const dir = frente ? 1 : -1;
+      const sx = dir * (camAnim.portas[i]||0) * slice * 0.92; // desliza pro lado
       const mov = p=>[p[0]+sx, p[1], p[2]];
       const part = {tipo:'porta', idx:i, key, anim:i};
       add(x1, x2, -hh+0.6, hh-0.6, trilhoZ, trilhoZ+t, CORES.ext, part, mov);
-      const px = x1 + (x2-x1)*((i%2===0) ? 0.9 : 0.1); // puxador vertical na borda
+      const px = frente ? x2-2 : x1+2; // puxador vertical na borda interna
       add(px-1, px+1, -8, 8, trilhoZ-1.2, trilhoZ, CORES.escuro, part, mov);
     }
   } else if(camVis.portas && m.portas>0){               // portas de giro (dobradiça)
@@ -992,7 +1031,7 @@ function desenhaMovel3D(ctx, W, H){
       const x2 = -hw + (2*hw)*(i+1)/m.portas - 0.6;
       const hingeEsq = (i%2===0);
       const hx = hingeEsq ? x1 : x2, zp = -hd - t/2;
-      const a = (hingeEsq ? -1.9 : 1.9) * (camAnim.portas[i]||0);
+      const a = (hingeEsq ? -Math.PI/2 : Math.PI/2) * (camAnim.portas[i]||0); // abre no máx 90°
       const gira = p=>{
         const dx = p[0]-hx, dz = p[2]-zp;
         return [hx + dx*Math.cos(a) - dz*Math.sin(a), p[1], zp + dx*Math.sin(a) + dz*Math.cos(a)];
@@ -1155,6 +1194,7 @@ function zNoPonto(f, px, py){
 function faceNoPonto(px, py){ // a face realmente visível sob o dedo
   let melhor = null, mz = Infinity;
   for(const f of camFaces){
+    if(f.part && f.part.tipo==='vaoDrop') continue; // área só de soltar, não intercepta toque
     if(!f.invisivel && areaPoly(f.p) < 60) continue; // quinas finas não roubam toque
     if(!dentroPoly(px, py, f.p)) continue;
     const z = zNoPonto(f, px, py);
@@ -1162,11 +1202,20 @@ function faceNoPonto(px, py){ // a face realmente visível sob o dedo
   }
   return melhor;
 }
-function colunaNoPonto(px, py){ // qual coluna está sob o dedo (usa as áreas invisíveis do vão)
+function colunaNoPonto(px, py){ // qual coluna está sob o dedo — usa o plano da FRENTE
   for(const f of camFaces){
-    if(f.part && f.part.tipo==='vao' && dentroPoly(px, py, f.p)) return f.part.col;
+    if(f.part && f.part.tipo==='vaoDrop' && dentroPoly(px, py, f.p)) return f.part.col;
   }
-  return null;
+  // fallback: coluna mais próxima na horizontal (nunca "volta pro lugar" à toa)
+  let melhor = null, dist = Infinity;
+  for(const f of camFaces){
+    if(f.part && f.part.tipo==='vaoDrop'){
+      const cx = f.p.reduce((a,q)=>a+q.x,0)/f.p.length;
+      const d = Math.abs(cx - px);
+      if(d < dist){ dist = d; melhor = f.part.col; }
+    }
+  }
+  return melhor;
 }
 function soltarPeca(px, py){ // fim do arrasto: soltou em outra coluna? transfere
   const p = camDrag.part, cols = modEstr.colunas;
