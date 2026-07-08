@@ -87,8 +87,18 @@
   .ce-row .nome{flex:1; min-width:72px;}
   .ce-row button{width:32px; height:32px; border-radius:8px; border:1px solid rgba(255,255,255,.5); background:rgba(255,255,255,.15); color:#fff; font-size:17px; cursor:pointer; padding:0;}
   .ce-row b{min-width:36px; text-align:center; font-size:14px;}
-  .cv{display:flex; align-items:center; gap:5px; color:#fff; font-size:12px; margin:0; font-weight:400;}
-  .cv input{width:auto; padding:0; margin:0;}
+  .cvgrid{display:grid; grid-template-columns:1fr 1fr; gap:6px 10px;}
+  .cv{display:flex; align-items:center; gap:7px; color:#eaeaea; font-size:12.5px; margin:0; font-weight:500; cursor:pointer; white-space:nowrap;}
+  .cv input[type=checkbox]{
+    -webkit-appearance:none; appearance:none; width:17px; height:17px; min-width:17px;
+    border:1.5px solid rgba(255,255,255,.55); border-radius:5px; background:rgba(255,255,255,.08);
+    padding:0; margin:0; cursor:pointer; position:relative; flex-shrink:0; transition:.12s;
+  }
+  .cv input[type=checkbox]:checked{background:#2ecc71; border-color:#2ecc71;}
+  .cv input[type=checkbox]:checked::after{
+    content:''; position:absolute; left:5px; top:1.5px; width:4px; height:9px;
+    border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg);
+  }
   #camMenu{position:absolute; bottom:180px; left:12px; right:12px; z-index:104; background:rgba(0,0,0,.88); border-radius:14px; padding:12px 14px; display:none;}
   #camMenuTitulo{color:#fff; font-weight:800; font-size:15px; margin-bottom:10px;}
   #camMenuBotoes{display:flex; flex-wrap:wrap; gap:8px;}
@@ -329,9 +339,9 @@
     <div class="ce-row"><span class="nome">Gavetas</span><button onclick="camAlt('mGav',-1,0)">−</button><b id="ceGav">0</b><button onclick="camAlt('mGav',1,0)">+</button></div>
     <div class="ce-row"><span class="nome">Prateleiras</span><button onclick="camAlt('mPrat',-1,0)">−</button><b id="cePrat">1</b><button onclick="camAlt('mPrat',1,0)">+</button></div>
     <div class="ce-row"><span class="nome">Divisórias</span><button onclick="camAlt('mDiv',-1,0)">−</button><b id="ceDiv">0</b><button onclick="camAlt('mDiv',1,0)">+</button></div>
-    <div style="border-top:1px solid rgba(255,255,255,.25); margin-top:8px; padding-top:8px;">
-      <div style="color:#fff; font-size:12px; margin-bottom:6px;">👁 Mostrar peças:</div>
-      <div style="display:flex; flex-wrap:wrap; gap:8px 12px;">
+    <div style="border-top:1px solid rgba(255,255,255,.2); margin-top:10px; padding-top:9px;">
+      <div style="color:#9fe6bd; font-size:11px; font-weight:700; letter-spacing:.4px; margin-bottom:7px;">👁 MOSTRAR PEÇAS</div>
+      <div class="cvgrid">
         <label class="cv"><input type="checkbox" class="camvis" checked onchange="camVisSet('portas',this.checked)">Portas</label>
         <label class="cv"><input type="checkbox" class="camvis" checked onchange="camVisSet('gavetas',this.checked)">Gavetas</label>
         <label class="cv"><input type="checkbox" class="camvis" checked onchange="camVisSet('prateleiras',this.checked)">Prateleiras</label>
@@ -341,9 +351,9 @@
         <label class="cv"><input type="checkbox" class="camvis" checked onchange="camVisSet('laterais',this.checked)">Laterais</label>
       </div>
     </div>
-    <div style="border-top:1px solid rgba(255,255,255,.25); margin-top:8px; padding-top:8px;">
-      <div style="color:#fff; font-size:12px; margin-bottom:6px;">🔧 Construção:</div>
-      <div style="display:flex; flex-wrap:wrap; gap:8px 12px;">
+    <div style="border-top:1px solid rgba(255,255,255,.2); margin-top:10px; padding-top:9px;">
+      <div style="color:#9fe6bd; font-size:11px; font-weight:700; letter-spacing:.4px; margin-bottom:7px;">🔧 CONSTRUÇÃO</div>
+      <div class="cvgrid" style="grid-template-columns:1fr;">
         <label class="cv"><input type="checkbox" id="ccLat" checked onchange="camConstrLat(this.checked)">Laterais passantes</label>
         <label class="cv"><input type="checkbox" id="ccTampo" onchange="camConstrSet('tampo',this.checked)">Tampo passante</label>
         <label class="cv"><input type="checkbox" id="ccBase" onchange="camConstrSet('base',this.checked)">Base passante</label>
