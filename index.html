@@ -494,6 +494,11 @@ function calcularModulo(m){
   // fita de borda (bordas aparentes, estimativa)
   let fita = 2*A + 2*L + prat*L + gav*2*(L+0.2) + nDiv*A;
   if(portas>0) fita += portas * 2*(A + L/portas);
+  // se o móvel foi editado, a fita só entra no custo quando é realmente aplicada
+  if(m.estr){
+    const temFita = m.estr.fitaAll || (m.estr.fitas && Object.values(m.estr.fitas).some(v=>v));
+    if(!temFita) fita = 0;
+  }
 
   const correr = (m.portaTipo==='correr' && portas>0);
   const dobr = correr ? 0 : portas * (m.A>160 ? 3 : 2); // porta de correr não usa dobradiça
@@ -624,19 +629,25 @@ function colPrats(c){ // posições das prateleiras (frações 0..1); compatíve
   return c.prats;
 }
 function rebuildEstrutura(){
+  const prev = modEstr || {}; // preserva acabamento ao redistribuir a estrutura
   const nc = (Number(document.getElementById('mDiv').value)||0) + 1;
   const prat = Number(document.getElementById('mPrat').value)||0;
   const gav  = Number(document.getElementById('mGav').value)||0;
-  modEstr = { colunas: Array.from({length:nc}, (_,i)=>{
-    const np = Math.floor(prat/nc) + (i < prat%nc ? 1 : 0);
-    return {
-      prats: Array.from({length:np}, (_,j)=>(j+1)/(np+1)), // posições verticais (fração)
-      gav:  Math.floor(gav/nc) + (i < gav%nc ? 1 : 0),
-      cab: false,
-      cabY: 0.12, // altura do cabideiro (fração, do topo pra baixo)
-      w: 1/nc, // fração da largura do vão
-    };
-  }) };
+  modEstr = {
+    colunas: Array.from({length:nc}, (_,i)=>{
+      const np = Math.floor(prat/nc) + (i < prat%nc ? 1 : 0);
+      return {
+        prats: Array.from({length:np}, (_,j)=>(j+1)/(np+1)), // posições verticais (fração)
+        gav:  Math.floor(gav/nc) + (i < gav%nc ? 1 : 0),
+        cab: false,
+        cabY: 0.12, // altura do cabideiro (fração, do topo pra baixo)
+        w: 1/nc, // fração da largura do vão
+      };
+    }),
+    cor: prev.cor, cores: prev.cores || {},         // mantém cores
+    fitaAll: prev.fitaAll, fitas: prev.fitas || {}, // mantém fita
+    eng: prev.eng,                                  // mantém engrossos
+  };
   camOcultas = {};
 }
 function setInputsTotais(){ // menu mexeu na estrutura -> formulário mostra os totais
@@ -947,7 +958,12 @@ function desenhaMovel3D(ctx, W, H){
     if(transf) fs.forEach(f=> f.pts = f.pts.map(transf));
     if(part){
       const fc = (role!=='escuro') ? fitaDe(part.key) : null; // fita na borda da peça
-      fs.forEach(f=>{ f.part = part; if(fc && f.frente) f.fita = fc; });
+      // em painel-tábua (borda fina de frente) a fita PREENCHE a tira; em porta/gaveta faz o contorno
+      const tabua = ['lateral','divisoria','prateleira','tampo','base','engrosso'].includes(part.tipo);
+      fs.forEach(f=>{
+        f.part = part;
+        if(fc && f.frente){ if(tabua) f.c = fc; else f.fita = fc; }
+      });
     }
     faces.push(...fs);
   };
