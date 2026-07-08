@@ -1016,17 +1016,22 @@ function formicaDe(key){
   const v = (modEstr.formicas && (key in modEstr.formicas)) ? modEstr.formicas[key] : modEstr.formicaAll;
   return normFormica(v);
 }
-/* cor efetiva: fórmica da peça > cor da peça > cor do móvel > madeira padrão */
+/* cor efetiva: cor da peça > cor do móvel > madeira padrão (fórmica é tratada por-face no add) */
 function resolveCor(role, part){
   if(role==='escuro') return CORES.escuro; // puxadores sempre escuros
   let hex = null;
   const key = part && part.key;
-  const fm = key ? formicaDe(key) : null;
-  if(fm) hex = fm.c;
-  else if(key && modEstr && modEstr.cores && (key in modEstr.cores)) hex = modEstr.cores[key];
+  if(key && modEstr && modEstr.cores && (key in modEstr.cores)) hex = modEstr.cores[key];
   else if(modEstr && modEstr.cor) hex = modEstr.cor;
   if(!hex) return CORES[role];
   return coresDe(hex)[role];
+}
+/* área aproximada de um quad 3D (pts em coords do modelo) */
+function areaQuad(p){
+  const d1=[p[2][0]-p[0][0],p[2][1]-p[0][1],p[2][2]-p[0][2]];
+  const d2=[p[3][0]-p[1][0],p[3][1]-p[1][1],p[3][2]-p[1][2]];
+  const cx=d1[1]*d2[2]-d1[2]*d2[1], cy=d1[2]*d2[0]-d1[0]*d2[2], cz=d1[0]*d2[1]-d1[1]*d2[0];
+  return 0.5*Math.hypot(cx,cy,cz);
 }
 /* cor da fita de borda de uma peça (ou null = sem fita) */
 function fitaDe(key){
@@ -1061,19 +1066,30 @@ function desenhaMovel3D(ctx, W, H){
     let fs = boxFaces(x1,x2,y1,y2,z1,z2, resolveCor(role, part));
     if(transf) fs.forEach(f=> f.pts = f.pts.map(transf));
     if(part){
-      const fc = (role!=='escuro') ? fitaDe(part.key) : null; // fita na borda da peça
-      // painel-tábua (borda fina): a fita PREENCHE a tira frontal
+      fs.forEach(f=> f.part = part);
+      // ---- FÓRMICA: só nas faces grandes (superfície), conforme o lado ----
+      const fm = (role!=='escuro') ? formicaDe(part.key) : null;
+      if(fm){
+        const withA = fs.map(f=>({f, a:areaQuad(f.pts)}));
+        const maxA = Math.max(...withA.map(o=>o.a));
+        const surf = withA.filter(o=> o.a > maxA*0.6); // as duas superfícies (maiores)
+        // qual superfície é externa? a de centro mais longe da origem do móvel
+        surf.forEach(o=>{ const p=o.f.pts; o.d = Math.hypot(
+          (p[0][0]+p[2][0])/2, (p[0][1]+p[2][1])/2, (p[0][2]+p[2][2])/2); });
+        surf.sort((x,y)=> y.d - x.d); // [0]=externa, [1]=interna
+        if(fm.lado==='ambos') surf.forEach(o=> o.f.c = coresDe(fm.c).ext.frente);
+        else if(fm.lado==='int'){ if(surf[1]) surf[1].f.c = coresDe(fm.c).ext.frente; else if(surf[0]) surf[0].f.c = coresDe(fm.c).ext.frente; }
+        else { if(surf[0]) surf[0].f.c = coresDe(fm.c).ext.frente; } // externa (padrão)
+      }
+      // ---- FITA: por cima da fórmica, nas bordas ----
+      const fc = (role!=='escuro') ? fitaDe(part.key) : null;
       const tabua = ['lateral','divisoria','prateleira','tampo','base','engrosso'].includes(part.tipo);
-      fs.forEach(f=>{
-        f.part = part;
-        if(!fc) return;
-        if(tabua){ if(f.frente) f.c = fc; }                   // tábua: a face frontal É a borda → preenche
-        else if(part.tipo==='porta'){                          // porta: fita nas QUINAS (espessura)
-          if(!f.frente && !f.tras) f.c = fc;                  // lados + topo + base
-        }
-        else if(part.tipo==='gaveta' && part.gavPart!=='bottom'){ // gaveta: boca (rim) + frente
-          if(f.topo) f.c = fc;                                    // topo das paredes = boca fitada
-          if(f.frente && part.gavPart==='front') f.fita = fc;     // contorno da frente
+      if(fc) fs.forEach(f=>{
+        if(tabua){ if(f.frente) f.c = fc; }                   // tábua: face frontal É a borda
+        else if(part.tipo==='porta'){ if(!f.frente && !f.tras) f.c = fc; } // porta: quinas
+        else if(part.tipo==='gaveta' && part.gavPart!=='bottom'){
+          if(f.topo) f.c = fc;
+          if(f.frente && part.gavPart==='front') f.fita = fc;
         }
       });
     }
