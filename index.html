@@ -407,8 +407,11 @@
 <script>
 /* ================== ESTADO ================== */
 const MATERIAIS_PADRAO = [
+  {id:'chapa3',   nome:'Chapa MDF 3mm',                un:'chapa',  preco:120},
+  {id:'chapa6',   nome:'Chapa MDF 6mm',                un:'chapa',  preco:180},
   {id:'chapa15',  nome:'Chapa MDF 15mm (2,75×1,85m)', un:'chapa',  preco:300},
-  {id:'chapa6',   nome:'Chapa MDF 6mm — fundo',        un:'chapa',  preco:180},
+  {id:'chapa18',  nome:'Chapa MDF 18mm',               un:'chapa',  preco:360},
+  {id:'chapa25',  nome:'Chapa MDF 25mm',               un:'chapa',  preco:480},
   {id:'fita',     nome:'Fita de borda',                un:'metro',  preco:2.5},
   {id:'dobradica',nome:'Dobradiça',                    un:'unidade',preco:8},
   {id:'corredica',nome:'Corrediça',                    un:'par',    preco:25},
@@ -438,6 +441,8 @@ if(!db.materiais.find(x=>x.id==='tubo')){ // migração: cabideiro em bancos ant
 if(!db.materiais.find(x=>x.id==='trilho')){ // migração: porta de correr
   db.materiais.push({id:'trilho', nome:'Trilho porta de correr', un:'metro', preco:40});
 }
+[['chapa3','Chapa MDF 3mm',120],['chapa18','Chapa MDF 18mm',360],['chapa25','Chapa MDF 25mm',480]]
+  .forEach(([id,nome,preco])=>{ if(!db.materiais.find(x=>x.id===id)) db.materiais.push({id,nome,un:'chapa',preco}); });
 
 let projetoAtual = null;      // índice em db.projetos
 let modoCliente = false;
@@ -464,32 +469,60 @@ function calcularModulo(m){
     cabM = cols.reduce((a,c)=>a+(c.cab ? vaoM*(c.w||1/cols.length) : 0), 0); // metros de tubo
   }
 
-  // áreas em MDF 15mm
-  let a15 = 2*(A*P) + 2*(L*P) + prat*(L*P);          // laterais + base/tampo + prateleiras
-  a15 += nDiv*(A*P);                                  // divisórias verticais
-  if(m.estr && m.estr.eng){                           // engrossos (tira de ~8cm em 15mm)
+  // ---- áreas por espessura de chapa (mm) ----
+  const espCorpo = (m.estr && m.estr.espCorpo) || 15;
+  const espFundo = (m.estr && m.estr.espFundo) || 6;
+  const espGav   = (m.estr && m.estr.espGavFundo) || 6;
+  const espMap   = (m.estr && m.estr.esp) || {};
+  const espP = (key, def)=> (key in espMap) ? espMap[key] : def;
+  const buckets = {};
+  const addArea = (mm, area)=>{ if(area>0) buckets[mm] = (buckets[mm]||0) + area; };
+
+  addArea(espP('lateral-esq', espCorpo), A*P);
+  addArea(espP('lateral-dir', espCorpo), A*P);
+  addArea(espP('tampo', espCorpo), L*P);
+  addArea(espP('base',  espCorpo), L*P);
+
+  const colsArr = (m.estr && m.estr.colunas && m.estr.colunas.length) ? m.estr.colunas : null;
+  if(colsArr){
+    const vaoW = Math.max(0.1, L - 0.05 - nDiv*0.025);
+    colsArr.forEach((c, ci)=>{
+      const cw = vaoW * (c.w || 1/colsArr.length);
+      colPrats(c).forEach((fr,i)=> addArea(espP('prateleira-'+ci+'-'+i, espCorpo), cw*P));
+    });
+    for(let i=0;i<nDiv;i++) addArea(espP('divisoria-'+i, espCorpo), A*P);
+  } else {
+    addArea(espCorpo, prat*(L*P));
+  }
+
+  if(m.estr && m.estr.eng){                           // engrossos (tira de ~8cm)
     const e = m.estr.eng, tira = 0.08;
     if(e.v2){
       const nVert = (e['lateral-esq']||[]).length + (e['lateral-dir']||[]).length
         + Object.values(e.divs||{}).reduce((a,l)=>a+(l?l.length:0), 0);
       const nHor = (e.tampo||[]).length + (e.base||[]).length;
-      a15 += nVert*A*tira + nHor*L*tira;
-    } else { // formato antigo (módulos salvos antes)
-      if(e.latE)  a15 += A*tira;
-      if(e.latD)  a15 += A*tira;
-      if(e.tampo) a15 += L*tira;
-      if(e.base)  a15 += L*tira;
-      a15 += Object.values(e.divs||{}).filter(Boolean).length * A*tira;
+      addArea(espCorpo, nVert*A*tira + nHor*L*tira);
+    } else {
+      let ea = 0;
+      if(e.latE) ea+=A*tira; if(e.latD) ea+=A*tira;
+      if(e.tampo) ea+=L*tira; if(e.base) ea+=L*tira;
+      ea += Object.values(e.divs||{}).filter(Boolean).length * A*tira;
+      addArea(espCorpo, ea);
     }
   }
-  if(portas>0) a15 += L*A;                            // frentes (portas)
-  a15 += gav*( L*0.2 + 2*(P*0.15) + L*0.15 );        // frente + caixa da gaveta
-  // áreas em MDF 6mm
-  let a6 = L*A + gav*(L*P);                           // fundo do módulo + fundos de gaveta
+
+  for(let i=0;i<portas;i++) addArea(espP('porta-'+i, espCorpo), (L/Math.max(1,portas))*A); // portas
+  addArea(espCorpo, gav*( L*0.2 + 2*(P*0.15) + L*0.15 ));  // caixa das gavetas
+  addArea(espP('fundo', espFundo), L*A);                    // fundo do móvel
+  addArea(espGav, gav*(L*P));                               // fundo das gavetas
 
   const perda = Number(db.config.perda)||1.2;
-  const chapas15 = Math.ceil((a15*perda/AREA_CHAPA)*2)/2;  // arredonda p/ meia chapa
-  const chapas6  = Math.ceil((a6 *perda/AREA_CHAPA)*2)/2;
+  let custoChapa = 0; let totChapas = 0; const chapasPorEsp = {};
+  for(const mm in buckets){
+    const ch = Math.ceil((buckets[mm]*perda/AREA_CHAPA)*2)/2;
+    chapasPorEsp[mm] = ch; totChapas += ch;
+    custoChapa += ch * precoDe('chapa'+mm);
+  }
 
   // fita de borda (bordas aparentes, estimativa)
   let fita = 2*A + 2*L + prat*L + gav*2*(L+0.2) + nDiv*A;
@@ -508,12 +541,12 @@ function calcularModulo(m){
   const parafCentos = 0.3;                // ~30 parafusos por módulo
 
   const custo =
-    chapas15*precoDe('chapa15') + chapas6*precoDe('chapa6') +
+    custoChapa +
     fita*precoDe('fita') + dobr*precoDe('dobradica') +
     corr*precoDe('corredica') + pux*precoDe('puxador') +
     parafCentos*precoDe('parafuso') + cabM*precoDe('tubo') + trilhoM*precoDe('trilho');
 
-  return {chapas15, chapas6, fita:Math.round(fita*10)/10, dobr, corr, pux, custo};
+  return {chapas:totChapas, chapasPorEsp, fita:Math.round(fita*10)/10, dobr, corr, pux, custo};
 }
 
 function calcularProjeto(p){
@@ -706,7 +739,7 @@ function renderModulos(){
     const d = calcularModulo(m);
     return `<div class="mod-item">
       <div class="titulo">${TIPOS[m.tipo].nome} — ${medNum(m.L)}×${medNum(m.A)}×${medNum(m.P)} ${unidade()}</div>
-      <div class="det">${m.portas} porta(s) · ${m.gav} gaveta(s) · ${m.prat} prateleira(s) · ${d.chapas15} chapa(s) 15mm · ${d.fita}m de fita</div>
+      <div class="det">${m.portas} porta(s) · ${m.gav} gaveta(s) · ${m.prat} prateleira(s) · ${d.chapas} chapa(s) · ${d.fita}m de fita</div>
       <div class="preco">${modoCliente ? '' : 'material: '+fmt(d.custo)}</div>
       <button class="btn mini vermelho" onclick="removerModulo(${i})">remover</button>
     </div>`;
@@ -939,8 +972,8 @@ function boxFaces(x1,x2,y1,y2,z1,z2,cor){
   return [
     {i:[0,1,2,3], c:cor.frente, frente:true}, {i:[5,4,7,6], c:cor.tras},
     {i:[4,0,3,7], c:cor.lado},   {i:[1,5,6,2], c:cor.lado},
-    {i:[4,5,1,0], c:cor.topo},   {i:[3,2,6,7], c:cor.base},
-  ].map(f=>({pts:f.i.map(ix=>P[ix]), c:f.c, frente:f.frente}));
+    {i:[4,5,1,0], c:cor.topo, topo:true},   {i:[3,2,6,7], c:cor.base},
+  ].map(f=>({pts:f.i.map(ix=>P[ix]), c:f.c, frente:f.frente, topo:f.topo}));
 }
 
 function desenhaMovel3D(ctx, W, H){
@@ -949,7 +982,9 @@ function desenhaMovel3D(ctx, W, H){
   const s = (Math.min(W,H)*0.55/(cam3d.norm || Math.max(m.L, m.A))) * cam3d.s;
   const cx = W/2 + cam3d.x, cy = H/2 + cam3d.y;
   const hw = m.L/2, hh = m.A/2, hd = m.P/2;
-  const t = 2.5, tf = 1.5; // espessura das tábuas / do fundo
+  const FE = 1.6; // fator visual (mm→cm exagerado pra dar pra ver a diferença)
+  const t  = ((m.estr && m.estr.espCorpo) || 15)/10 * FE; // espessura das tábuas
+  const tf = ((m.estr && m.estr.espFundo) || 6)/10 * FE;  // espessura do fundo
 
   let faces = [];
   const add = (x1,x2,y1,y2,z1,z2,cor,part,transf)=>{
@@ -958,11 +993,14 @@ function desenhaMovel3D(ctx, W, H){
     if(transf) fs.forEach(f=> f.pts = f.pts.map(transf));
     if(part){
       const fc = (role!=='escuro') ? fitaDe(part.key) : null; // fita na borda da peça
-      // em painel-tábua (borda fina de frente) a fita PREENCHE a tira; em porta/gaveta faz o contorno
+      // painel-tábua (borda fina): a fita PREENCHE a tira frontal
       const tabua = ['lateral','divisoria','prateleira','tampo','base','engrosso'].includes(part.tipo);
       fs.forEach(f=>{
         f.part = part;
-        if(fc && f.frente){ if(tabua) f.c = fc; else f.fita = fc; }
+        if(!fc) return;
+        if(tabua && f.frente) f.c = fc;                       // borda da tábua = fita cheia
+        else if(part.tipo==='gaveta' && (f.frente || f.topo)) f.fita = fc; // gaveta: frente + rim de cima
+        else if(part.tipo==='porta' && f.frente) f.fita = fc; // porta: contorno da frente
       });
     }
     faces.push(...fs);
@@ -1142,7 +1180,7 @@ function desenhaMovel3D(ctx, W, H){
     ctx.fillStyle = f.c;
     ctx.fill();
     if(primeira){ ctx.shadowBlur = 0; primeira = false; } // sombra só na silhueta
-    if(f.fita){ ctx.strokeStyle = f.fita; ctx.lineWidth = 3.5; } // fita de borda colorida
+    if(f.fita){ ctx.strokeStyle = f.fita; ctx.lineWidth = 5; ctx.lineJoin='round'; } // fita de borda colorida
     else { ctx.strokeStyle = 'rgba(61,40,16,.8)'; ctx.lineWidth = 1.4; }
     ctx.stroke();
   });
@@ -1379,7 +1417,8 @@ function abrirMenuPeca(part){
     botoes = `<button onclick="menuAcao('excluir')">🗑 Excluir engrosso</button>`
            + `<button onclick="menuAcao('cor')">🎨 Cor</button>`;
   } else if(part.tipo==='lateral' || part.tipo==='tampo' || part.tipo==='base'){
-    botoes = `<button onclick="menuAcao('engInt')">🪵 + Engrosso dentro</button>
+    botoes = `<button onclick="menuAcao('esp')">📏 Espessura</button>
+              <button onclick="menuAcao('engInt')">🪵 + Engrosso dentro</button>
               <button onclick="menuAcao('engExt')">🪵 + Engrosso fora</button>
               <button onclick="menuAcao('cor')">🎨 Cor da peça</button>
               <button onclick="menuAcao('fita')">🎗 Fita da peça</button>
@@ -1392,6 +1431,8 @@ function abrirMenuPeca(part){
     }
     if(part.tipo==='porta' || part.tipo==='gaveta') botoes += `<button onclick="menuAcao('abrir')">↔ Abrir/fechar</button>`;
     if(part.tipo==='divisoria') botoes += `<button onclick="menuAcao('engDiv')">🪵 + Engrosso</button>`;
+    if(part.tipo==='prateleira'||part.tipo==='divisoria'||part.tipo==='porta')
+      botoes += `<button onclick="menuAcao('esp')">📏 Espessura</button>`;
     botoes += `<button onclick="menuAcao('cor')">🎨 Cor</button>`;
     if(part.tipo!=='cabideiro') botoes += `<button onclick="menuAcao('fita')">🎗 Fita</button>`;
     botoes += `<button onclick="menuAcao('ocultar')">👁 Ocultar</button>
@@ -1412,6 +1453,9 @@ function menuMovel(){
     `<button onclick="menuAcao('corMovel')">🎨 Cor do móvel</button>
      <button onclick="menuAcao('fitaTudo')">🎗 Fitar todas as bordas</button>
      <button onclick="menuAcao('semFita')">🚫 Tirar toda a fita</button>
+     <button onclick="menuAcao('espCorpo')">📏 Chapa do corpo</button>
+     <button onclick="menuAcao('espFundo')">📏 Chapa do fundo</button>
+     <button onclick="menuAcao('espGav')">📏 Fundo das gavetas</button>
      <button onclick="fecharMenuPeca()">✕ Fechar</button>`;
   document.getElementById('camMenu').style.display = 'block';
 }
@@ -1427,6 +1471,35 @@ function mostrarSwatches(titulo, ctx, comSemFita){
   document.getElementById('camMenuTitulo').textContent = titulo;
   document.getElementById('camMenuBotoes').innerHTML = sw + `<button onclick="fecharMenuPeca()">✕ Fechar</button>`;
   document.getElementById('camMenu').style.display = 'block';
+}
+/* submenu de espessura de chapa */
+const ESPESSURAS = [3, 6, 15, 18, 25];
+function mostrarEspessuras(titulo, ctx){
+  camCorCtx = ctx;
+  const atual = espAtual(ctx);
+  const btns = ESPESSURAS.map(mm=>{
+    const on = mm===atual;
+    return `<button onclick="escolherEsp(${mm})" style="${on?'background:#2ecc71;border-color:#2ecc71;':''}">${mm}mm</button>`;
+  }).join('');
+  document.getElementById('camMenuTitulo').textContent = titulo;
+  document.getElementById('camMenuBotoes').innerHTML = btns + `<button onclick="fecharMenuPeca()">✕ Fechar</button>`;
+  document.getElementById('camMenu').style.display = 'block';
+}
+function espAtual(ctx){
+  if(ctx.tipo==='espCorpo') return modEstr.espCorpo||15;
+  if(ctx.tipo==='espFundo') return modEstr.espFundo||6;
+  if(ctx.tipo==='espGav')   return modEstr.espGavFundo||6;
+  if(ctx.tipo==='espPeca')  return (modEstr.esp && (ctx.key in modEstr.esp)) ? modEstr.esp[ctx.key] : (modEstr.espCorpo||15);
+  return 15;
+}
+function escolherEsp(mm){
+  const c = camCorCtx;
+  if(c.tipo==='espCorpo') modEstr.espCorpo = mm;
+  else if(c.tipo==='espFundo') modEstr.espFundo = mm;
+  else if(c.tipo==='espGav')   modEstr.espGavFundo = mm;
+  else if(c.tipo==='espPeca'){ if(!modEstr.esp) modEstr.esp = {}; modEstr.esp[c.key] = mm; }
+  if(navigator.vibrate) navigator.vibrate(12);
+  atualizarPrecoCam(); renderCam(); fecharMenuPeca();
 }
 function escolherCor(i){
   const c = camCorCtx;
@@ -1456,6 +1529,10 @@ function menuAcao(acao){
   if(acao==='corMovel'){ mostrarSwatches('Cor do móvel',   {tipo:'corMovel'},  false); return; }
   if(acao==='fitaTudo'){ mostrarSwatches('Cor da fita',     {tipo:'fitaTudo'},  true);  return; }
   if(acao==='semFita'){ modEstr.fitaAll=null; modEstr.fitas={}; atualizarPrecoCam(); renderCam(); fecharMenuPeca(); return; }
+  if(acao==='esp'){      mostrarEspessuras('Espessura da peça', {tipo:'espPeca', key:p.key}); return; }
+  if(acao==='espCorpo'){ mostrarEspessuras('Chapa do corpo',    {tipo:'espCorpo'}); return; }
+  if(acao==='espFundo'){ mostrarEspessuras('Chapa do fundo',    {tipo:'espFundo'}); return; }
+  if(acao==='espGav'){   mostrarEspessuras('Fundo das gavetas', {tipo:'espGav'}); return; }
   if(acao==='esq' || acao==='dir'){ moverPecaColuna(p, acao==='esq'?-1:1); return; }
   if(p.tipo === 'vao'){
     if(acao==='prat') colPrats(cols[p.col]).push(0.5); // nasce no meio, arrasta depois
