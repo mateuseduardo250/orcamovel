@@ -364,8 +364,9 @@
   <div id="camBase">
     <label id="camLabel">👆 Toque na porta/gaveta = abre · 🖐 arraste = girar · ✊ segure = mover</label>
     <input type="range" id="camScale" min="0.3" max="3" step="0.05" value="1" oninput="ajustarEscalaCam()">
-    <div style="display:flex; gap:10px; margin-top:10px;">
+    <div style="display:flex; gap:8px; margin-top:10px;">
       <button class="cam-btn" id="btnEditar" onclick="toggleCamEditMode()">✏️ Editar</button>
+      <button class="cam-btn" onclick="menuMovel()">🎨</button>
       <button class="cam-btn" onclick="togglePortas()">🚪</button>
       <button class="cam-btn" style="flex:1" onclick="tirarFoto()">📸 Foto</button>
     </div>
@@ -855,6 +856,7 @@ let camConstr = {tampo:false, base:false}; // construção: tampo/base passante
 let camAnim = {portas:{}, gavetas:{}}, camAnimTarget = {portas:{}, gavetas:{}}, camAnimando = false;
 let camFaces = [];
 let camS = 1; // escala px/cm do último render (pro arrasto de peças)
+let camCorCtx = null; // contexto do submenu de cores/fita
 const camCv = document.getElementById('camCanvas');
 
 /* projeção 3D em perspectiva (rotação Y + leve inclinação X) */
@@ -876,14 +878,58 @@ const CORES = {
   escuro:{frente:'#3d2810', tras:'#3d2810', lado:'#3d2810', topo:'#3d2810', base:'#3d2810'},
 };
 
-/* gera as 6 faces de uma tábua/caixa 3D */
+// paleta de cores de acabamento (móvel inteiro ou peça)
+const PALETA = [
+  {nome:'Madeira',     hex:null},        // null = tom de madeira padrão
+  {nome:'Branco',      hex:'#EDEDE9'},
+  {nome:'Cinza claro', hex:'#C3C6C9'},
+  {nome:'Cinza',       hex:'#8C9196'},
+  {nome:'Grafite',     hex:'#42474D'},
+  {nome:'Preto',       hex:'#26262A'},
+  {nome:'Nogueira',    hex:'#6E4B2A'},
+  {nome:'Bege',        hex:'#D9C4A0'},
+  {nome:'Azul',        hex:'#3E5C74'},
+  {nome:'Verde',       hex:'#4B6B4A'},
+];
+
+/* clareia (f>0) ou escurece (f<0) uma cor hex */
+function shade(hex, f){
+  let r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  const alvo = f>0 ? 255 : 0, t = Math.abs(f);
+  r=Math.round(r+(alvo-r)*t); g=Math.round(g+(alvo-g)*t); b=Math.round(b+(alvo-b)*t);
+  return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+/* dado uma cor base, gera os tons das faces (frente/lados/topo/base) */
+function coresDe(hex){
+  return {
+    ext:{frente:shade(hex,0.02), tras:shade(hex,-0.3), lado:shade(hex,-0.14), topo:shade(hex,0.14), base:shade(hex,-0.34)},
+    int:{frente:shade(hex,0.12), tras:shade(hex,-0.2), lado:shade(hex,-0.04), topo:shade(hex,0.2), base:shade(hex,-0.24)},
+  };
+}
+/* cor efetiva de uma peça: override da peça > cor do móvel > madeira padrão */
+function resolveCor(role, part){
+  if(role==='escuro') return CORES.escuro; // puxadores sempre escuros
+  let hex = null;
+  if(part && part.key && modEstr && modEstr.cores && (part.key in modEstr.cores)) hex = modEstr.cores[part.key];
+  else if(modEstr && modEstr.cor) hex = modEstr.cor;
+  if(!hex) return CORES[role];
+  return coresDe(hex)[role];
+}
+/* cor da fita de borda de uma peça (ou null = sem fita) */
+function fitaDe(key){
+  if(!modEstr) return null;
+  if(modEstr.fitas && (key in modEstr.fitas)) return modEstr.fitas[key];
+  return modEstr.fitaAll || null;
+}
+
+/* gera as 6 faces de uma tábua/caixa 3D (marca a face da frente) */
 function boxFaces(x1,x2,y1,y2,z1,z2,cor){
   const P = [[x1,y1,z1],[x2,y1,z1],[x2,y2,z1],[x1,y2,z1],[x1,y1,z2],[x2,y1,z2],[x2,y2,z2],[x1,y2,z2]];
   return [
-    {i:[0,1,2,3], c:cor.frente}, {i:[5,4,7,6], c:cor.tras},
+    {i:[0,1,2,3], c:cor.frente, frente:true}, {i:[5,4,7,6], c:cor.tras},
     {i:[4,0,3,7], c:cor.lado},   {i:[1,5,6,2], c:cor.lado},
     {i:[4,5,1,0], c:cor.topo},   {i:[3,2,6,7], c:cor.base},
-  ].map(f=>({pts:f.i.map(ix=>P[ix]), c:f.c}));
+  ].map(f=>({pts:f.i.map(ix=>P[ix]), c:f.c, frente:f.frente}));
 }
 
 function desenhaMovel3D(ctx, W, H){
@@ -896,9 +942,13 @@ function desenhaMovel3D(ctx, W, H){
 
   let faces = [];
   const add = (x1,x2,y1,y2,z1,z2,cor,part,transf)=>{
-    let fs = boxFaces(x1,x2,y1,y2,z1,z2,cor);
+    const role = cor===CORES.int?'int': cor===CORES.escuro?'escuro':'ext';
+    let fs = boxFaces(x1,x2,y1,y2,z1,z2, resolveCor(role, part));
     if(transf) fs.forEach(f=> f.pts = f.pts.map(transf));
-    if(part) fs.forEach(f=> f.part = part);
+    if(part){
+      const fc = (role!=='escuro') ? fitaDe(part.key) : null; // fita na borda da peça
+      fs.forEach(f=>{ f.part = part; if(fc && f.frente) f.fita = fc; });
+    }
     faces.push(...fs);
   };
 
@@ -1076,7 +1126,8 @@ function desenhaMovel3D(ctx, W, H){
     ctx.fillStyle = f.c;
     ctx.fill();
     if(primeira){ ctx.shadowBlur = 0; primeira = false; } // sombra só na silhueta
-    ctx.strokeStyle = 'rgba(61,40,16,.8)'; ctx.lineWidth = 1.4;
+    if(f.fita){ ctx.strokeStyle = f.fita; ctx.lineWidth = 3.5; } // fita de borda colorida
+    else { ctx.strokeStyle = 'rgba(61,40,16,.8)'; ctx.lineWidth = 1.4; }
     ctx.stroke();
   });
   ctx.restore();
@@ -1253,6 +1304,23 @@ function soltarPeca(px, py){ // fim do arrasto: soltou em outra coluna? transfer
   camDrag.gx = 0; camDrag.gy = 0;
   renderCam();
 }
+/* mover peça pra coluna vizinha via botão do menu (⬅ ➡) */
+function moverPecaColuna(p, dir){
+  const cols = modEstr.colunas;
+  const alvo = p.col + dir;
+  if(alvo<0 || alvo>=cols.length){ fecharMenuPeca(); return; }
+  if(p.tipo==='gaveta'){
+    cols[p.col].gav = Math.max(0, cols[p.col].gav-1); cols[alvo].gav++;
+  } else if(p.tipo==='prateleira'){
+    const fr = colPrats(cols[p.col]).splice(p.idx,1)[0];
+    colPrats(cols[alvo]).push(fr);
+  } else if(p.tipo==='cabideiro'){
+    if(cols[alvo].cab){ fecharMenuPeca(); return; } // coluna destino já tem
+    cols[alvo].cab = true; cols[alvo].cabY = cols[p.col].cabY; cols[p.col].cab = false;
+  }
+  if(navigator.vibrate) navigator.vibrate(20);
+  setInputsTotais(); atualizarPrecoCam(); renderCam(); fecharMenuPeca();
+}
 function tocarMovel(px, py){
   fecharMenuPeca();
   const f = faceNoPonto(px, py);
@@ -1286,19 +1354,30 @@ function abrirMenuPeca(part){
                  engrosso:'Engrosso (arraste pra posicionar)',
                  vao:'Coluna '+(part.col+1)+' — espaço vazio'};
   let botoes = '';
+  const nCols = modEstr.colunas.length;
   if(part.tipo === 'vao'){
     botoes = `<button onclick="menuAcao('prat')">➕ Prateleira</button>
               <button onclick="menuAcao('gav')">➕ Gaveta</button>`
            + (modEstr.colunas[part.col].cab ? '' : `<button onclick="menuAcao('cab')">➕ Cabideiro</button>`);
   } else if(part.tipo==='engrosso'){
-    botoes = `<button onclick="menuAcao('excluir')">🗑 Excluir engrosso</button>`;
+    botoes = `<button onclick="menuAcao('excluir')">🗑 Excluir engrosso</button>`
+           + `<button onclick="menuAcao('cor')">🎨 Cor</button>`;
   } else if(part.tipo==='lateral' || part.tipo==='tampo' || part.tipo==='base'){
-    botoes = `<button onclick="menuAcao('engInt')">🪵 + Engrosso por dentro</button>
-              <button onclick="menuAcao('engExt')">🪵 + Engrosso por fora</button>
+    botoes = `<button onclick="menuAcao('engInt')">🪵 + Engrosso dentro</button>
+              <button onclick="menuAcao('engExt')">🪵 + Engrosso fora</button>
+              <button onclick="menuAcao('cor')">🎨 Cor da peça</button>
+              <button onclick="menuAcao('fita')">🎗 Fita da peça</button>
               <button onclick="menuAcao('ocultar')">👁 Ocultar</button>`;
   } else {
+    // mover entre colunas (só peças que vivem numa coluna)
+    if((part.tipo==='prateleira'||part.tipo==='gaveta'||part.tipo==='cabideiro') && nCols>1){
+      if(part.col>0)        botoes += `<button onclick="menuAcao('esq')">⬅ Esquerda</button>`;
+      if(part.col<nCols-1)  botoes += `<button onclick="menuAcao('dir')">➡ Direita</button>`;
+    }
     if(part.tipo==='porta' || part.tipo==='gaveta') botoes += `<button onclick="menuAcao('abrir')">↔ Abrir/fechar</button>`;
     if(part.tipo==='divisoria') botoes += `<button onclick="menuAcao('engDiv')">🪵 + Engrosso</button>`;
+    botoes += `<button onclick="menuAcao('cor')">🎨 Cor</button>`;
+    if(part.tipo!=='cabideiro') botoes += `<button onclick="menuAcao('fita')">🎗 Fita</button>`;
     botoes += `<button onclick="menuAcao('ocultar')">👁 Ocultar</button>
                <button onclick="menuAcao('excluir')">🗑 Excluir</button>`;
   }
@@ -1306,6 +1385,45 @@ function abrirMenuPeca(part){
   document.getElementById('camMenuBotoes').innerHTML = botoes + `<button onclick="fecharMenuPeca()">✕ Fechar</button>`;
   document.getElementById('camMenu').style.display = 'block';
   if(navigator.vibrate) navigator.vibrate(15);
+}
+
+/* menu do móvel inteiro (botão 🎨) */
+function menuMovel(){
+  if(!modEstr){ rebuildEstrutura(); }
+  camMenuAlvo = {tipo:'movel'};
+  document.getElementById('camMenuTitulo').textContent = 'Móvel inteiro';
+  document.getElementById('camMenuBotoes').innerHTML =
+    `<button onclick="menuAcao('corMovel')">🎨 Cor do móvel</button>
+     <button onclick="menuAcao('fitaTudo')">🎗 Fitar todas as bordas</button>
+     <button onclick="menuAcao('semFita')">🚫 Tirar toda a fita</button>
+     <button onclick="fecharMenuPeca()">✕ Fechar</button>`;
+  document.getElementById('camMenu').style.display = 'block';
+}
+
+/* submenu de cores (swatches) */
+function mostrarSwatches(titulo, ctx, comSemFita){
+  camCorCtx = ctx;
+  let sw = PALETA.map((c,i)=>{
+    const bg = c.hex || '#C89B69';
+    return `<button onclick="escolherCor(${i})" style="flex:0 0 44px; height:40px; background:${bg}; border:2px solid rgba(255,255,255,.5); padding:0;" title="${c.nome}"></button>`;
+  }).join('');
+  if(comSemFita) sw = `<button onclick="escolherCor(-1)">🚫 Sem fita</button>` + sw;
+  document.getElementById('camMenuTitulo').textContent = titulo;
+  document.getElementById('camMenuBotoes').innerHTML = sw + `<button onclick="fecharMenuPeca()">✕ Fechar</button>`;
+  document.getElementById('camMenu').style.display = 'block';
+}
+function escolherCor(i){
+  const c = camCorCtx;
+  const hex = i<0 ? null : PALETA[i].hex; // Madeira (hex null) = tom padrão; -1 = sem fita
+  if(!modEstr.cores) modEstr.cores = {};
+  if(!modEstr.fitas) modEstr.fitas = {};
+  if(c.tipo==='corMovel'){ modEstr.cor = hex; modEstr.cores = {}; } // recolore tudo
+  else if(c.tipo==='corPeca'){ if(hex===null) delete modEstr.cores[c.key]; else modEstr.cores[c.key]=hex; }
+  else if(c.tipo==='fitaTudo'){ modEstr.fitaAll = i<0 ? null : (PALETA[i].hex || '#8a6236'); modEstr.fitas = {}; }
+  else if(c.tipo==='fitaPeca'){ modEstr.fitas[c.key] = i<0 ? null : (PALETA[i].hex || '#8a6236'); }
+  if(navigator.vibrate) navigator.vibrate(12);
+  atualizarPrecoCam(); renderCam();
+  fecharMenuPeca();
 }
 function fecharMenuPeca(){
   camMenuAlvo = null;
@@ -1316,6 +1434,13 @@ function menuAcao(acao){
   const p = camMenuAlvo;
   if(!p || !modEstr){ fecharMenuPeca(); return; }
   const cols = modEstr.colunas;
+  // ações que abrem o submenu de cores (não fecham o menu)
+  if(acao==='cor'){    mostrarSwatches('Cor da peça',  {tipo:'corPeca', key:p.key}, false); return; }
+  if(acao==='fita'){   mostrarSwatches('Fita da peça', {tipo:'fitaPeca', key:p.key}, true);  return; }
+  if(acao==='corMovel'){ mostrarSwatches('Cor do móvel',   {tipo:'corMovel'},  false); return; }
+  if(acao==='fitaTudo'){ mostrarSwatches('Cor da fita',     {tipo:'fitaTudo'},  true);  return; }
+  if(acao==='semFita'){ modEstr.fitaAll=null; modEstr.fitas={}; atualizarPrecoCam(); renderCam(); fecharMenuPeca(); return; }
+  if(acao==='esq' || acao==='dir'){ moverPecaColuna(p, acao==='esq'?-1:1); return; }
   if(p.tipo === 'vao'){
     if(acao==='prat') colPrats(cols[p.col]).push(0.5); // nasce no meio, arrasta depois
     if(acao==='gav')  cols[p.col].gav++;
