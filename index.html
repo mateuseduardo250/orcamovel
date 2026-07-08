@@ -436,6 +436,8 @@ const MATERIAIS_PADRAO = [
   {id:'trilho',   nome:'Trilho porta de correr',       un:'metro',  preco:40},
   {id:'roldana',  nome:'Roldana porta de correr',      un:'unidade',preco:15},
   {id:'pistao',   nome:'Pistão a gás',                 un:'unidade',preco:22},
+  {id:'formica',  nome:'Fórmica (chapa 2,75×1,25m)',   un:'chapa',  preco:210, cat:'formica'},
+  {id:'colacontato', nome:'Cola de contato (galão)',   un:'galão',  preco:90},
 ];
 const TIPOS = {
   aereo:   {nome:'Armário aéreo',        L:120, A:70,  P:35, portas:2, gav:0, prat:1, divs:0},
@@ -459,7 +461,8 @@ if(!db.materiais.find(x=>x.id==='trilho')){ // migração: porta de correr
 }
 [['chapa3','Chapa MDF 3mm',120],['chapa18','Chapa MDF 18mm',360],['chapa25','Chapa MDF 25mm',480]]
   .forEach(([id,nome,preco])=>{ if(!db.materiais.find(x=>x.id===id)) db.materiais.push({id,nome,un:'chapa',preco}); });
-[['roldana','Roldana porta de correr','unidade',15,'roldana'],['pistao','Pistão a gás','unidade',22,'pistao']]
+[['roldana','Roldana porta de correr','unidade',15,'roldana'],['pistao','Pistão a gás','unidade',22,'pistao'],
+ ['formica','Fórmica (chapa 2,75×1,25m)','chapa',210,'formica'],['colacontato','Cola de contato (galão)','galão',90,'outro']]
   .forEach(([id,nome,un,preco,cat])=>{ if(!db.materiais.find(x=>x.id===id)) db.materiais.push({id,nome,un,preco,cat}); });
 
 let projetoAtual = null;      // índice em db.projetos
@@ -494,21 +497,31 @@ function calcularModulo(m){
   const espMap   = (m.estr && m.estr.esp) || {};
   const espP = (key, def)=> (key in espMap) ? espMap[key] : def;
   const buckets = {};
-  const addArea = (mm, area)=>{ if(area>0) buckets[mm] = (buckets[mm]||0) + area; };
+  let formicaArea = 0; // m² de faces com fórmica (custo à parte)
+  const fmKey = key => { // tem fórmica nessa peça? (usa m.estr, não o global)
+    if(!m.estr) return false;
+    if(m.estr.formicas && (key in m.estr.formicas)) return !!m.estr.formicas[key];
+    return !!m.estr.formicaAll;
+  };
+  const addArea = (mm, area, key)=>{
+    if(area<=0) return;
+    buckets[mm] = (buckets[mm]||0) + area;
+    if(key && fmKey(key)) formicaArea += area;
+  };
 
-  addArea(espP('lateral-esq', espCorpo), A*P);
-  addArea(espP('lateral-dir', espCorpo), A*P);
-  addArea(espP('tampo', espCorpo), L*P);
-  addArea(espP('base',  espCorpo), L*P);
+  addArea(espP('lateral-esq', espCorpo), A*P, 'lateral-esq');
+  addArea(espP('lateral-dir', espCorpo), A*P, 'lateral-dir');
+  addArea(espP('tampo', espCorpo), L*P, 'tampo');
+  addArea(espP('base',  espCorpo), L*P, 'base');
 
   const colsArr = (m.estr && m.estr.colunas && m.estr.colunas.length) ? m.estr.colunas : null;
   if(colsArr){
     const vaoW = Math.max(0.1, L - 0.05 - nDiv*0.025);
     colsArr.forEach((c, ci)=>{
       const cw = vaoW * (c.w || 1/colsArr.length);
-      colPrats(c).forEach((fr,i)=> addArea(espP('prateleira-'+ci+'-'+i, espCorpo), cw*P));
+      colPrats(c).forEach((fr,i)=> addArea(espP('prateleira-'+ci+'-'+i, espCorpo), cw*P, 'prateleira-'+ci+'-'+i));
     });
-    for(let i=0;i<nDiv;i++) addArea(espP('divisoria-'+i, espCorpo), A*P);
+    for(let i=0;i<nDiv;i++) addArea(espP('divisoria-'+i, espCorpo), A*P, 'divisoria-'+i);
   } else {
     addArea(espCorpo, prat*(L*P));
   }
@@ -529,7 +542,7 @@ function calcularModulo(m){
     }
   }
 
-  for(let i=0;i<portas;i++) addArea(espP('porta-'+i, espCorpo), (L/Math.max(1,portas))*A); // portas
+  for(let i=0;i<portas;i++) addArea(espP('porta-'+i, espCorpo), (L/Math.max(1,portas))*A, 'porta-'+i); // portas
   addArea(espCorpo, gav*( L*0.2 + 2*(P*0.15) + L*0.15 ));  // caixa das gavetas
   if(!(m.estr && m.estr.semFundo)) addArea(espP('fundo', espFundo), L*A); // fundo do móvel
   addArea(espGav, gav*(L*P));                               // fundo das gavetas
@@ -541,6 +554,11 @@ function calcularModulo(m){
     chapasPorEsp[mm] = ch; totChapas += ch;
     custoChapa += ch * precoDe('chapa'+mm);
   }
+  // fórmica: chapas de fórmica (2,75×1,25m) + cola de contato
+  const AREA_FORMICA = 2.75 * 1.25;
+  const chapasFormica = formicaArea>0 ? Math.ceil((formicaArea*perda/AREA_FORMICA)*2)/2 : 0;
+  const galoesCola = formicaArea>0 ? Math.ceil((formicaArea/8)*10)/10 : 0; // ~1 galão a cada 8 m²
+  const custoFormica = chapasFormica*precoDe('formica') + galoesCola*precoDe('colacontato');
 
   // fita de borda (bordas aparentes, estimativa)
   let fita = 2*A + 2*L + prat*L + gav*2*(L+0.2) + nDiv*A;
@@ -568,7 +586,7 @@ function calcularModulo(m){
   const idRoldana = modelo.roldana   || 'roldana';
   const idPistao  = modelo.pistao    || 'pistao';
   const custo =
-    custoChapa +
+    custoChapa + custoFormica +
     fita*precoDe('fita') + dobr*precoDe(idDobr) +
     corr*precoDe(idCorr) + pux*precoDe(idPux) +
     parafCentos*precoDe('parafuso') + cabM*precoDe('tubo') +
@@ -707,7 +725,10 @@ function rebuildEstrutura(){
     }),
     cor: prev.cor, cores: prev.cores || {},         // mantém cores
     fitaAll: prev.fitaAll, fitas: prev.fitas || {}, // mantém fita
+    formicaAll: prev.formicaAll, formicas: prev.formicas || {}, // mantém fórmica
     eng: prev.eng,                                  // mantém engrossos
+    espCorpo: prev.espCorpo, espFundo: prev.espFundo, espGavFundo: prev.espGavFundo, esp: prev.esp || {}, // espessuras
+    modelo: prev.modelo || {}, pistao: prev.pistao, semFundo: prev.semFundo, // ferragens e construção
   };
   camOcultas = {};
 }
@@ -986,11 +1007,20 @@ function coresDe(hex){
     int:{frente:shade(hex,0.12), tras:shade(hex,-0.2), lado:shade(hex,-0.04), topo:shade(hex,0.2), base:shade(hex,-0.24)},
   };
 }
-/* cor efetiva de uma peça: override da peça > cor do móvel > madeira padrão */
+/* fórmica de uma peça (hex) ou null */
+function formicaDe(key){
+  if(!modEstr) return null;
+  if(modEstr.formicas && (key in modEstr.formicas)) return modEstr.formicas[key];
+  return modEstr.formicaAll || null;
+}
+/* cor efetiva: fórmica da peça > cor da peça > cor do móvel > madeira padrão */
 function resolveCor(role, part){
   if(role==='escuro') return CORES.escuro; // puxadores sempre escuros
   let hex = null;
-  if(part && part.key && modEstr && modEstr.cores && (part.key in modEstr.cores)) hex = modEstr.cores[part.key];
+  const key = part && part.key;
+  const fm = key ? formicaDe(key) : null;
+  if(fm) hex = fm;
+  else if(key && modEstr && modEstr.cores && (key in modEstr.cores)) hex = modEstr.cores[key];
   else if(modEstr && modEstr.cor) hex = modEstr.cor;
   if(!hex) return CORES[role];
   return coresDe(hex)[role];
@@ -1491,6 +1521,7 @@ function abrirMenuPeca(part){
               <button onclick="menuAcao('engInt')">🪵 + Engrosso dentro</button>
               <button onclick="menuAcao('engExt')">🪵 + Engrosso fora</button>
               <button onclick="menuAcao('cor')">🎨 Cor da peça</button>
+              <button onclick="menuAcao('formica')">🪞 Fórmica</button>
               <button onclick="menuAcao('fita')">🎗 Fita da peça</button>
               <button onclick="menuAcao('ocultar')">👁 Ocultar</button>`;
   } else {
@@ -1504,6 +1535,7 @@ function abrirMenuPeca(part){
     if(part.tipo==='prateleira'||part.tipo==='divisoria'||part.tipo==='porta')
       botoes += `<button onclick="menuAcao('esp')">📏 Espessura</button>`;
     botoes += `<button onclick="menuAcao('cor')">🎨 Cor</button>`;
+    if(part.tipo!=='cabideiro') botoes += `<button onclick="menuAcao('formica')">🪞 Fórmica</button>`;
     if(part.tipo!=='cabideiro') botoes += `<button onclick="menuAcao('fita')">🎗 Fita</button>`;
     botoes += `<button onclick="menuAcao('ocultar')">👁 Ocultar</button>
                <button onclick="menuAcao('excluir')">🗑 Excluir</button>`;
@@ -1521,6 +1553,8 @@ function menuMovel(){
   document.getElementById('camMenuTitulo').textContent = 'Móvel inteiro';
   document.getElementById('camMenuBotoes').innerHTML =
     `<button onclick="menuAcao('corMovel')">🎨 Cor do móvel</button>
+     <button onclick="menuAcao('formicaMovel')">🪞 Fórmica no móvel</button>
+     <button onclick="menuAcao('semFormica')">🚫 Tirar fórmica</button>
      <button onclick="menuAcao('fitaTudo')">🎗 Fitar todas as bordas</button>
      <button onclick="menuAcao('semFita')">🚫 Tirar toda a fita</button>
      <button onclick="menuAcao('espCorpo')">📏 Chapa do corpo</button>
@@ -1544,7 +1578,10 @@ function mostrarSwatches(titulo, ctx, comSemFita){
     const bg = c.hex || '#C89B69';
     return `<button onclick="escolherCor(${i})" style="flex:0 0 44px; height:40px; background:${bg}; border:2px solid rgba(255,255,255,.5); padding:0;" title="${c.nome}"></button>`;
   }).join('');
-  if(comSemFita) sw = `<button onclick="escolherCor(-1)">🚫 Sem fita</button>` + sw;
+  if(comSemFita){
+    const lbl = (ctx.tipo==='formicaPeca'||ctx.tipo==='formicaAll') ? '🚫 Sem fórmica' : '🚫 Sem fita';
+    sw = `<button onclick="escolherCor(-1)">${lbl}</button>` + sw;
+  }
   document.getElementById('camMenuTitulo').textContent = titulo;
   document.getElementById('camMenuBotoes').innerHTML = sw + `<button onclick="fecharMenuPeca()">✕ Fechar</button>`;
   document.getElementById('camMenu').style.display = 'block';
@@ -1607,10 +1644,13 @@ function escolherCor(i){
   const hex = i<0 ? null : PALETA[i].hex; // Madeira (hex null) = tom padrão; -1 = sem fita
   if(!modEstr.cores) modEstr.cores = {};
   if(!modEstr.fitas) modEstr.fitas = {};
+  if(!modEstr.formicas) modEstr.formicas = {};
   if(c.tipo==='corMovel'){ modEstr.cor = hex; modEstr.cores = {}; } // recolore tudo
   else if(c.tipo==='corPeca'){ if(hex===null) delete modEstr.cores[c.key]; else modEstr.cores[c.key]=hex; }
   else if(c.tipo==='fitaTudo'){ modEstr.fitaAll = i<0 ? null : (PALETA[i].hex || '#8a6236'); modEstr.fitas = {}; }
   else if(c.tipo==='fitaPeca'){ modEstr.fitas[c.key] = i<0 ? null : (PALETA[i].hex || '#8a6236'); }
+  else if(c.tipo==='formicaAll'){ modEstr.formicaAll = i<0 ? null : (PALETA[i].hex || '#C89B69'); modEstr.formicas = {}; }
+  else if(c.tipo==='formicaPeca'){ modEstr.formicas[c.key] = i<0 ? null : (PALETA[i].hex || '#C89B69'); }
   if(navigator.vibrate) navigator.vibrate(12);
   atualizarPrecoCam(); renderCam();
   fecharMenuPeca();
@@ -1627,7 +1667,10 @@ function menuAcao(acao){
   // ações que abrem o submenu de cores (não fecham o menu)
   if(acao==='cor'){    mostrarSwatches('Cor da peça',  {tipo:'corPeca', key:p.key}, false); return; }
   if(acao==='fita'){   mostrarSwatches('Fita da peça', {tipo:'fitaPeca', key:p.key}, true);  return; }
+  if(acao==='formica'){ mostrarSwatches('Fórmica da peça', {tipo:'formicaPeca', key:p.key}, true); return; }
   if(acao==='corMovel'){ mostrarSwatches('Cor do móvel',   {tipo:'corMovel'},  false); return; }
+  if(acao==='formicaMovel'){ mostrarSwatches('Fórmica do móvel', {tipo:'formicaAll'}, false); return; }
+  if(acao==='semFormica'){ modEstr.formicaAll=null; modEstr.formicas={}; atualizarPrecoCam(); renderCam(); fecharMenuPeca(); return; }
   if(acao==='fitaTudo'){ mostrarSwatches('Cor da fita',     {tipo:'fitaTudo'},  true);  return; }
   if(acao==='semFita'){ modEstr.fitaAll=null; modEstr.fitas={}; atualizarPrecoCam(); renderCam(); fecharMenuPeca(); return; }
   if(acao==='togglePistao'){ modEstr.pistao = !modEstr.pistao; atualizarPrecoCam(); menuMovel(); return; }
