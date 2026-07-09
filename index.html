@@ -234,6 +234,7 @@
       <select id="mPortaTipo" onchange="desenhar()">
         <option value="giro">Giro (dobradiça)</option>
         <option value="correr">De correr (trilho)</option>
+        <option value="basculante">Basculante (abre pra cima, pistão)</option>
       </select>
       <div class="desenho" id="desenhoModulo"></div>
       <div class="row" style="margin-top:10px;">
@@ -462,6 +463,7 @@ if(!db.materiais.find(x=>x.id==='trilho')){ // migração: porta de correr
 [['chapa3','Chapa MDF 3mm',120],['chapa18','Chapa MDF 18mm',360],['chapa25','Chapa MDF 25mm',480]]
   .forEach(([id,nome,preco])=>{ if(!db.materiais.find(x=>x.id===id)) db.materiais.push({id,nome,un:'chapa',preco}); });
 [['roldana','Roldana porta de correr','unidade',15,'roldana'],['pistao','Pistão a gás','unidade',22,'pistao'],
+ ['pistao10','Pistão a gás 10N','unidade',18,'pistao'],['pistao20','Pistão a gás 20N','unidade',24,'pistao'],['pistao35','Pistão a gás 35N','unidade',32,'pistao'],
  ['formica','Fórmica (chapa 2,75×1,25m)','chapa',210,'formica'],['colacontato','Cola de contato (galão)','galão',90,'outro']]
   .forEach(([id,nome,un,preco,cat])=>{ if(!db.materiais.find(x=>x.id===id)) db.materiais.push({id,nome,un,preco,cat}); });
 
@@ -572,10 +574,11 @@ function calcularModulo(m){
   }
 
   const correr = (m.portaTipo==='correr' && portas>0);
-  const dobr = correr ? 0 : portas * (m.A>160 ? 3 : 2); // porta de correr não usa dobradiça
+  const basc   = (m.portaTipo==='basculante' && portas>0);
+  const dobr = correr ? 0 : (basc ? 2*portas : portas * (m.A>160 ? 3 : 2)); // basculante: 2 no topo
   const trilhoM = correr ? L*2 : 0;                      // trilho superior + inferior
   const roldanas = correr ? 2*portas : 0;                // ~2 rodinhas por porta de correr
-  const pistoes = (m.estr && m.estr.pistao && !correr) ? portas : 0; // pistão nas portas (opção)
+  const pistoes = basc ? 2*portas : ((m.estr && m.estr.pistao && !correr) ? portas : 0); // basculante: 2 pistões/porta
   const corr = gav;                       // pares
   const pux  = portas + gav;
   const parafCentos = 0.3;                // ~30 parafusos por módulo
@@ -1244,6 +1247,30 @@ function desenhaMovel3D(ctx, W, H){
       const rpart = {tipo:'roldana', idx:i, key:'roldana-'+i};
       [x1+3, x2-3].forEach(wx=> add(wx-2, wx+2, hh-2.5, hh+0.6, trilhoZ, trilhoZ+t, CORES.escuro, rpart, mov));
     }
+  } else if(camVis.portas && m.portas>0 && m.portaTipo==='basculante'){ // basculante (abre pra cima)
+    for(let i=0;i<m.portas;i++){
+      const key = 'porta-'+i;
+      if(camOcultas[key]) continue;
+      const x1 = -hw + (2*hw)*i/m.portas + 0.6;
+      const x2 = -hw + (2*hw)*(i+1)/m.portas - 0.6;
+      const py = -hh+0.6, pz = -hd - t/2;               // pivô no topo, na frente
+      const a = -(Math.PI/2) * (camAnim.portas[i]||0);  // abre pra cima/fora
+      const gira = p=>{ const dy=p[1]-py, dz=p[2]-pz;
+        return [p[0], py + dy*Math.cos(a) - dz*Math.sin(a), pz + dy*Math.sin(a) + dz*Math.cos(a)]; };
+      const part = {tipo:'porta', idx:i, key, anim:i};
+      add(x1, x2, -hh+0.6, hh-0.6, -hd-t, -hd, CORES.ext, part, gira);
+      add((x1+x2)/2-4, (x1+x2)/2+4, hh-4, hh-1, -hd-t-1.5, -hd-t, CORES.escuro, part, gira); // puxador embaixo
+      const dpart = {tipo:'dobradica', idx:i, key:'dobradica-'+i};
+      [x1+6, x2-6].forEach(dx0=> add(dx0-2, dx0+2, -hh+0.6, -hh+4, -hd, -hd+4, CORES.escuro, dpart, gira)); // dobradiças no topo
+      // pistões (2, um de cada lado): do móvel até a porta
+      const pistPart = {tipo:'pistao', idx:i, key:'pistao-'+i}, w=0.8;
+      [x1+3, x2-3].forEach(pxs=>{
+        const A = [pxs, hh*0.05, hd-8];                 // fixo no fundo do móvel
+        const B = gira([pxs, -hh+40, -hd]);             // ponto na porta (segue a porta)
+        faces.push({pts:[[A[0]-w,A[1],A[2]],[A[0]+w,A[1],A[2]],[B[0]+w,B[1],B[2]],[B[0]-w,B[1],B[2]]],
+                    c:'#b8b8b8', frente:true, part:pistPart});
+      });
+    }
   } else if(camVis.portas && m.portas>0){               // portas de giro (dobradiça)
     for(let i=0;i<m.portas;i++){
       const key = 'porta-'+i;
@@ -1522,6 +1549,7 @@ function abrirMenuPeca(part){
   if(part.tipo==='dobradica'){ mostrarModelos('dobradica', 'Modelo da dobradiça'); return; }
   if(part.tipo==='corredica'){ mostrarModelos('corredica', 'Modelo da corrediça'); return; }
   if(part.tipo==='roldana'){   mostrarModelos('roldana',   'Modelo da roldana'); return; }
+  if(part.tipo==='pistao'){    mostrarModelos('pistao',    'Modelo do pistão (Newton)'); return; }
   const nomes = {prateleira:'Prateleira', gaveta:'Gaveta', porta:'Porta', divisoria:'Divisória',
                  cabideiro:'Cabideiro', lateral:'Lateral', tampo:'Tampo', base:'Base',
                  engrosso:'Engrosso (arraste pra posicionar)',
