@@ -236,6 +236,11 @@
         <option value="correr">De correr (trilho)</option>
         <option value="basculante">Basculante (abre pra cima, pistão)</option>
       </select>
+      <label>Tipo de puxador</label>
+      <select id="mPuxadorTipo" onchange="setPuxadorTipo(this.value)">
+        <option value="botao">Botão / alça (por unidade)</option>
+        <option value="perfil">Perfil de alumínio (por metro)</option>
+      </select>
       <div class="desenho" id="desenhoModulo"></div>
       <div class="row" style="margin-top:10px;">
         <div><label>📐 Parede — larg. (<span class="lblUn">cm</span>)</label><input id="parL" type="number" value="400"></div>
@@ -464,7 +469,8 @@ if(!db.materiais.find(x=>x.id==='trilho')){ // migração: porta de correr
   .forEach(([id,nome,preco])=>{ if(!db.materiais.find(x=>x.id===id)) db.materiais.push({id,nome,un:'chapa',preco}); });
 [['roldana','Roldana porta de correr','unidade',15,'roldana'],['pistao','Pistão a gás','unidade',22,'pistao'],
  ['pistao10','Pistão a gás 10N','unidade',18,'pistao'],['pistao20','Pistão a gás 20N','unidade',24,'pistao'],['pistao35','Pistão a gás 35N','unidade',32,'pistao'],
- ['formica','Fórmica (chapa 2,75×1,25m)','chapa',210,'formica'],['colacontato','Cola de contato (galão)','galão',90,'outro']]
+ ['formica','Fórmica (chapa 2,75×1,25m)','chapa',210,'formica'],['colacontato','Cola de contato (galão)','galão',90,'outro'],
+ ['perfilalum','Puxador perfil de alumínio','metro',35,'puxador']]
   .forEach(([id,nome,un,preco,cat])=>{ if(!db.materiais.find(x=>x.id===id)) db.materiais.push({id,nome,un,preco,cat}); });
 
 let projetoAtual = null;      // índice em db.projetos
@@ -590,10 +596,14 @@ function calcularModulo(m){
   const idTrilho  = modelo.trilho    || 'trilho';
   const idRoldana = modelo.roldana   || 'roldana';
   const idPistao  = modelo.pistao    || 'pistao';
+  const nCols = (m.estr && m.estr.colunas) ? m.estr.colunas.length : 1;
+  const perfilPux = (m.estr && m.estr.puxadorTipo==='perfil');
+  const puxMetros = (portas>0 ? L : 0) + gav*(L/nCols);   // metros de perfil (largura das peças)
+  const custoPux = perfilPux ? puxMetros*precoDe(idPux) : pux*precoDe(idPux);
   const custo =
     custoChapa + custoFormica +
     fita*precoDe('fita') + dobr*precoDe(idDobr) +
-    corr*precoDe(idCorr) + pux*precoDe(idPux) +
+    corr*precoDe(idCorr) + custoPux +
     parafCentos*precoDe('parafuso') + cabM*precoDe('tubo') +
     trilhoM*precoDe(idTrilho) + roldanas*precoDe(idRoldana) + pistoes*precoDe(idPistao);
 
@@ -733,7 +743,7 @@ function rebuildEstrutura(){
     formicaAll: prev.formicaAll, formicas: prev.formicas || {}, // mantém fórmica
     eng: prev.eng,                                  // mantém engrossos
     espCorpo: prev.espCorpo, espFundo: prev.espFundo, espGavFundo: prev.espGavFundo, esp: prev.esp || {}, // espessuras
-    modelo: prev.modelo || {}, pistao: prev.pistao, semFundo: prev.semFundo, // ferragens e construção
+    modelo: prev.modelo || {}, pistao: prev.pistao, semFundo: prev.semFundo, puxadorTipo: prev.puxadorTipo, // ferragens e construção
   };
   camOcultas = {};
 }
@@ -983,6 +993,7 @@ const CORES = {
   int:{frente:'#D9B181', tras:'#a5794a', lado:'#b08850', topo:'#DDB98A', base:'#96703f'},
   escuro:{frente:'#3d2810', tras:'#3d2810', lado:'#3d2810', topo:'#3d2810', base:'#3d2810'},
 };
+const CORES_ALUM = {frente:'#c9ccce', tras:'#9aa0a3', lado:'#b3b8bb', topo:'#d9dcde', base:'#8f9497'};
 
 // paleta de cores de acabamento (móvel inteiro ou peça)
 const PALETA = [
@@ -1022,6 +1033,7 @@ function formicaDe(key){
 /* cor efetiva: cor da peça > cor do móvel > madeira padrão (fórmica é tratada por-face no add) */
 function resolveCor(role, part){
   if(role==='escuro') return CORES.escuro; // puxadores sempre escuros
+  if(role==='alum') return CORES_ALUM;     // perfil de alumínio mantém a cor
   let hex = null;
   const key = part && part.key;
   if(key && modEstr && modEstr.cores && (key in modEstr.cores)) hex = modEstr.cores[key];
@@ -1062,10 +1074,11 @@ function desenhaMovel3D(ctx, W, H){
   const FE = 1.6; // fator visual (mm→cm exagerado pra dar pra ver a diferença)
   const t  = ((m.estr && m.estr.espCorpo) || 15)/10 * FE; // espessura das tábuas
   const tf = ((m.estr && m.estr.espFundo) || 6)/10 * FE;  // espessura do fundo
+  const perfilPux = (m.estr && m.estr.puxadorTipo==='perfil'); // puxador perfil de alumínio
 
   let faces = [];
   const add = (x1,x2,y1,y2,z1,z2,cor,part,transf)=>{
-    const role = cor===CORES.int?'int': cor===CORES.escuro?'escuro':'ext';
+    const role = cor===CORES.int?'int': cor===CORES.escuro?'escuro': cor===CORES_ALUM?'alum':'ext';
     let fs = boxFaces(x1,x2,y1,y2,z1,z2, resolveCor(role, part));
     if(transf) fs.forEach(f=> f.pts = f.pts.map(transf));
     if(part){
@@ -1197,7 +1210,8 @@ function desenhaMovel3D(ctx, W, H){
         add(x1c-wl, x1c, yt, yb, -hd, -hd+prof, CORES.ext, wall, mov);         // parede direita
         add(x0, x1c, yt, yb, -hd+prof-wl, -hd+prof, CORES.ext, wall, mov);     // parede de trás
         add(x0, x1c, yb-wl, yb, -hd, -hd+prof, CORES.int, bott, mov);          // fundo da gaveta
-        add(cmeio-6, cmeio+6, (yt+yb)/2-1, (yt+yb)/2+1, -hd-2, -hd-0.5, CORES.escuro, front, mov); // puxador
+        if(perfilPux) add(x0, x1c, yt, yt+2.5, -hd-1.3, -hd-0.5, CORES_ALUM, front, mov);           // perfil no topo
+        else add(cmeio-6, cmeio+6, (yt+yb)/2-1, (yt+yb)/2+1, -hd-2, -hd-0.5, CORES.escuro, front, mov); // botão
         // corrediças (uma de cada lado), tocáveis pra escolher o modelo
         const cym = (yt+yb)/2, cpart = {tipo:'corredica', col:ci, idx:i, key:'corredica-'+ci+'-'+i};
         add(cx0-1, cx0+0.5, cym-1.6, cym+1.6, -hd+3, -hd+prof, CORES.escuro, cpart, mov);
@@ -1259,7 +1273,8 @@ function desenhaMovel3D(ctx, W, H){
         return [p[0], py + dy*Math.cos(a) - dz*Math.sin(a), pz + dy*Math.sin(a) + dz*Math.cos(a)]; };
       const part = {tipo:'porta', idx:i, key, anim:i};
       add(x1, x2, -hh+0.6, hh-0.6, -hd-t, -hd, CORES.ext, part, gira);
-      add((x1+x2)/2-4, (x1+x2)/2+4, hh-4, hh-1, -hd-t-1.5, -hd-t, CORES.escuro, part, gira); // puxador embaixo
+      if(perfilPux) add(x1, x2, hh-3.2, hh-0.6, -hd-t-1.3, -hd-t, CORES_ALUM, part, gira);            // perfil embaixo
+      else add((x1+x2)/2-4, (x1+x2)/2+4, hh-4, hh-1, -hd-t-1.5, -hd-t, CORES.escuro, part, gira);     // botão embaixo
       const dpart = {tipo:'dobradica', idx:i, key:'dobradica-'+i};
       [x1+6, x2-6].forEach(dx0=> add(dx0-2, dx0+2, -hh+0.6, -hh+4, -hd, -hd+4, CORES.escuro, dpart, gira)); // dobradiças no topo
       // pistões (2, um de cada lado): do móvel até a porta
@@ -1286,9 +1301,13 @@ function desenhaMovel3D(ctx, W, H){
       };
       const part = {tipo:'porta', idx:i, key, anim:i};
       add(x1, x2, -hh+0.6, hh-0.6, -hd-t, -hd, CORES.ext, part, gira);
-      const frac = hingeEsq ? 0.88 : 0.12;
-      const px = x1 + (x2-x1)*frac;
-      add(px-2, px+2, -2, 2, -hd-t-1.5, -hd-t, CORES.escuro, part, gira); // puxador
+      if(perfilPux){ // perfil de alumínio no topo da porta
+        add(x1, x2, -hh+0.6, -hh+3.2, -hd-t-1.3, -hd-t, CORES_ALUM, part, gira);
+      } else {
+        const frac = hingeEsq ? 0.88 : 0.12;
+        const px = x1 + (x2-x1)*frac;
+        add(px-2, px+2, -2, 2, -hd-t-1.5, -hd-t, CORES.escuro, part, gira); // puxador botão
+      }
       // dobradiças visíveis (mais numa porta alta), tocáveis pra escolher o modelo
       const nDob = m.A>180 ? 4 : (m.A>120 ? 3 : 2);
       const dpart = {tipo:'dobradica', idx:i, key:'dobradica-'+i};
@@ -1351,6 +1370,7 @@ async function abrirCamera(){
   document.getElementById('camLabel').textContent = '👆 Toque na porta/gaveta = abre · 🖐 arraste = girar · ✊ segure = mover';
   document.querySelectorAll('.camvis').forEach(c=> c.checked = true);
   const sf = document.getElementById('ccSemFundo'); if(sf) sf.checked = !!(modEstr && modEstr.semFundo);
+  const pt = document.getElementById('mPuxadorTipo'); if(pt) pt.value = (modEstr && modEstr.puxadorTipo) || 'botao';
   syncConstrUI();
   document.getElementById('camScale').value = 1;
   atualizarPrecoCam();
@@ -1380,6 +1400,10 @@ function camVisSet(k, v){ camVis[k] = v; renderCam(); }
    cada canto tem um dono: se o tampo não passa, a lateral passa (e vice-versa) */
 function camConstrSet(k, v){ camConstr[k] = v; syncConstrUI(); renderCam(); }
 function camSemFundo(v){ if(modEstr){ modEstr.semFundo = v; } atualizarPrecoCam(); renderCam(); }
+function setPuxadorTipo(v){
+  if(modEstr){ modEstr.puxadorTipo = v; if(v==='perfil' && (!modEstr.modelo || !modEstr.modelo.puxador)){ modEstr.modelo = modEstr.modelo||{}; modEstr.modelo.puxador = 'perfilalum'; } }
+  atualizarPrecoCam(); renderCam();
+}
 function camConstrLat(v){
   // marcar laterais passantes = tampo e base encaixados; desmarcar = os dois passantes
   camConstr.tampo = !v; camConstr.base = !v;
