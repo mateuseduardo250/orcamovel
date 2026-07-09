@@ -17,8 +17,17 @@
   button{user-select:none; -webkit-user-select:none;}
   body{background:var(--creme); color:#2B2B2B; padding-bottom:150px;}
 
+  /* ícones SVG — tamanho controlado (senão renderizam gigantes) */
+  .app-icon{width:1em; height:1em; fill:currentColor; display:inline-block; vertical-align:middle; flex-shrink:0;}
+  header .logo .app-icon{width:30px; height:30px;}
+  .tabs button .app-icon{width:22px; height:22px;}
+  .btn-ico{display:inline-flex; align-items:center;}
+  .btn-ico .app-icon{width:18px; height:18px;}
+  .icon-btn{display:inline-flex; align-items:center; justify-content:center; gap:8px;}
+  .empty-ico .app-icon{width:44px; height:44px;}
+
   header{background:var(--madeira-escura); color:#fff; padding:14px 16px; position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:10px;}
-  header .logo{font-size:22px;}
+  header .logo{font-size:22px; display:inline-flex;}
   header h1{font-size:19px; font-weight:700; letter-spacing:.3px;}
   header small{opacity:.8; display:block; font-size:11px; font-weight:400;}
 
