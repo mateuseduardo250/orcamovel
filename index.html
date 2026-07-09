@@ -72,11 +72,11 @@
   .rap-item.on{background:var(--verde-claro); border-radius:8px; padding:9px 8px;}
   .rstep{width:34px; height:34px; border-radius:9px; border:1px solid var(--borda); background:#fff; color:var(--madeira-escura); font-size:19px; font-weight:700; cursor:pointer; padding:0; flex-shrink:0;}
   .rq{min-width:26px; text-align:center; font-size:15px; font-weight:700;}
-  #rapTotal{position:fixed; bottom:56px; left:0; right:0; background:var(--madeira-escura); color:#fff; padding:10px 16px; display:none; z-index:25; align-items:center; justify-content:space-between;}
+  #rapTotal{background:var(--madeira-escura); color:#fff; padding:12px 14px; border-radius:12px; margin-bottom:12px; display:none; align-items:center; justify-content:space-between; box-shadow:0 6px 18px rgba(0,0,0,.25);}
   #rapTotal.show{display:flex;}
   #rapTotal .custo{font-size:12px; opacity:.85;}
-  #rapTotal .final{font-size:20px; font-weight:800;}
-  #rapTotal .olho{background:none; border:1px solid rgba(255,255,255,.4); color:#fff; border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer;}
+  #rapTotal .final{font-size:21px; font-weight:800; color:#FFE7B1;}
+  #rapTotal .olho{background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.4); color:#fff; border-radius:8px; padding:7px 10px; font-size:12px; cursor:pointer; flex-shrink:0;}
 
   .mod-item{border:1px solid var(--borda); border-radius:10px; padding:10px 12px; margin-bottom:8px; background:#FDFBF7;}
   .mod-item .titulo{font-weight:700; font-size:14px;}
@@ -340,6 +340,13 @@
       <label>Cliente / móvel</label>
       <input id="rapCliente" placeholder="Ex.: Cozinha da Dona Maria" oninput="salvarRapido()">
     </div>
+    <div id="rapTotal">
+      <div>
+        <div class="custo" id="rtCusto">Material: R$ 0</div>
+        <div class="final" id="rtFinal">R$ 0</div>
+      </div>
+      <button class="olho" id="rtOlho" onclick="toggleModoClienteRapido()">👁 modo cliente</button>
+    </div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin:4px 2px 8px;">
       <b style="font-size:15px; color:var(--madeira-escura);">Materiais para o móvel</b>
       <button class="btn mini claro" onclick="limparRapido()">limpar</button>
@@ -467,14 +474,6 @@
 </div>
 
 <!-- navegação -->
-<div id="rapTotal">
-  <div>
-    <div class="custo" id="rtCusto">Material: R$ 0</div>
-    <div class="final" id="rtFinal">R$ 0</div>
-  </div>
-  <button class="olho" id="rtOlho" onclick="toggleModoClienteRapido()">👁 modo cliente</button>
-</div>
-
 <nav class="tabs">
   <button id="nav-projetos" class="active" onclick="mostrarTab('projetos')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-folder"></use></svg></span>Projetos</button>
   <button id="nav-projeto" onclick="mostrarTab('projeto')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-tools"></use></svg></span>Montar</button>
