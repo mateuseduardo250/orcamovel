@@ -55,6 +55,20 @@
   .mat-item .un{font-size:11px; color:var(--cinza); display:block; font-weight:400;}
   .mat-item input{width:92px; text-align:right;}
 
+  /* orçamento rápido */
+  .rap-item{display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--borda);}
+  .rap-item:last-child{border-bottom:none;}
+  .rap-item .nome{flex:1; font-size:13.5px; font-weight:600;}
+  .rap-item .un{font-size:11px; color:var(--cinza); display:block; font-weight:400;}
+  .rap-item.on{background:var(--verde-claro); border-radius:8px; padding:9px 8px;}
+  .rstep{width:34px; height:34px; border-radius:9px; border:1px solid var(--borda); background:#fff; color:var(--madeira-escura); font-size:19px; font-weight:700; cursor:pointer; padding:0; flex-shrink:0;}
+  .rq{min-width:26px; text-align:center; font-size:15px; font-weight:700;}
+  #rapTotal{position:fixed; bottom:56px; left:0; right:0; background:var(--madeira-escura); color:#fff; padding:10px 16px; display:none; z-index:25; align-items:center; justify-content:space-between;}
+  #rapTotal.show{display:flex;}
+  #rapTotal .custo{font-size:12px; opacity:.85;}
+  #rapTotal .final{font-size:20px; font-weight:800;}
+  #rapTotal .olho{background:none; border:1px solid rgba(255,255,255,.4); color:#fff; border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer;}
+
   .mod-item{border:1px solid var(--borda); border-radius:10px; padding:10px 12px; margin-bottom:8px; background:#FDFBF7;}
   .mod-item .titulo{font-weight:700; font-size:14px;}
   .mod-item .det{font-size:12px; color:var(--cinza); margin-top:2px;}
@@ -306,6 +320,22 @@
     </div>
   </section>
 
+  <!-- ============ ORÇAMENTO RÁPIDO ============ -->
+  <section id="tab-rapido">
+    <h2>Orçamento rápido</h2>
+    <div class="card">
+      <label>Cliente / móvel</label>
+      <input id="rapCliente" placeholder="Ex.: Cozinha da Dona Maria" oninput="salvarRapido()">
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin:4px 2px 8px;">
+      <b style="font-size:15px; color:var(--madeira-escura);">Materiais para o móvel</b>
+      <button class="btn mini claro" onclick="limparRapido()">limpar</button>
+    </div>
+    <div class="card" id="rapLista"></div>
+    <div id="rapOrc"></div>
+    <button class="btn verde icon-btn" onclick="verOrcamentoRapido()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-file"></use></svg></span>Gerar orçamento</button>
+  </section>
+
   <!-- ============ CONFIG ============ -->
   <section id="tab-config">
     <h2>Configurações</h2>
@@ -331,6 +361,13 @@
       <input id="cFone" placeholder="Ex.: 81 9 9999-9999" oninput="salvarConfig()">
       <label>Validade do orçamento (dias)</label>
       <input id="cValidade" type="number" value="10" oninput="salvarConfig()">
+    </div>
+    <div class="card">
+      <span class="badge">BACKUP 💾</span>
+      <p class="muted" style="margin-bottom:8px;">Os dados ficam só neste aparelho. Baixe um backup de vez em quando pra não perder se trocar de celular ou limpar o navegador.</p>
+      <button class="btn claro" onclick="baixarBackup()">⬇️ Baixar backup</button>
+      <label style="margin-top:10px;">Restaurar de um backup</label>
+      <input type="file" id="fileBackup" accept="application/json" onchange="restaurarBackup(event)">
     </div>
     <div class="card">
       <button class="btn vermelho icon-btn" onclick="zerarTudo()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-trash"></use></svg></span>Apagar todos os dados</button>
@@ -417,9 +454,18 @@
 </div>
 
 <!-- navegação -->
+<div id="rapTotal">
+  <div>
+    <div class="custo" id="rtCusto">Material: R$ 0</div>
+    <div class="final" id="rtFinal">R$ 0</div>
+  </div>
+  <button class="olho" id="rtOlho" onclick="toggleModoClienteRapido()">👁 modo cliente</button>
+</div>
+
 <nav class="tabs">
   <button id="nav-projetos" class="active" onclick="mostrarTab('projetos')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-folder"></use></svg></span>Projetos</button>
   <button id="nav-projeto" onclick="mostrarTab('projeto')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-tools"></use></svg></span>Montar</button>
+  <button id="nav-rapido" onclick="mostrarTab('rapido')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-file"></use></svg></span>Rápido</button>
   <button id="nav-materiais" onclick="mostrarTab('materiais')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-receipt"></use></svg></span>Materiais</button>
   <button id="nav-config" onclick="mostrarTab('config')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-gear"></use></svg></span>Config</button>
 </nav>
@@ -625,13 +671,91 @@ function mostrarTab(t){
   document.getElementById('tab-'+t).classList.add('show');
   const nav = document.getElementById('nav-'+t); if(nav) nav.classList.add('active');
   document.getElementById('barraPreco').classList.toggle('show', t==='projeto' && projetoAtual!==null);
+  document.getElementById('rapTotal').classList.toggle('show', t==='rapido');
   if(t==='projetos') renderProjetos();
   if(t==='materiais') renderMateriais();
+  if(t==='rapido') renderRapido();
   if(t==='projeto'){
     if(projetoAtual===null){ novoProjeto(); return; }
     renderModulos();
   }
   calcular();
+}
+
+/* ================== ORÇAMENTO RÁPIDO ================== */
+let rapModoCliente = false;
+function orcRap(){ if(!db.orcRapido) db.orcRapido = {}; return db.orcRapido; }
+function renderRapido(){
+  document.getElementById('rapCliente').value = db.rapCliente || '';
+  const r = orcRap();
+  document.getElementById('rapLista').innerHTML = db.materiais.map(m=>{
+    const q = r[m.id]||0;
+    return `<div class="rap-item ${q>0?'on':''}">
+      <div class="nome">${m.nome}<span class="un">${fmt(m.preco)} / ${m.un}</span></div>
+      <button class="rstep" onclick="rapQtd('${m.id}',-1)">−</button>
+      <b class="rq">${q}</b>
+      <button class="rstep" onclick="rapQtd('${m.id}',1)">+</button>
+    </div>`;
+  }).join('');
+  atualizarTotalRapido();
+}
+function rapQtd(id, d){
+  const r = orcRap();
+  r[id] = Math.max(0, (r[id]||0)+d);
+  if(r[id]===0) delete r[id];
+  salvar(); renderRapido();
+}
+function salvarRapido(){ db.rapCliente = document.getElementById('rapCliente').value; salvar(); }
+function limparRapido(){ if(!confirm('Limpar o orçamento rápido?')) return; db.orcRapido = {}; db.rapCliente=''; document.getElementById('rapOrc').innerHTML=''; salvar(); renderRapido(); }
+function custoRapido(){ const r = orcRap(); return db.materiais.reduce((a,m)=> a + (r[m.id]||0)*(Number(m.preco)||0), 0); }
+function finalRapido(){ const bruto = custoRapido()*(1+(Number(db.config.margem)||0)/100); return Math.ceil(bruto/10)*10; } // arredonda pra cima (redondo)
+function atualizarTotalRapido(){
+  const custo = custoRapido();
+  document.getElementById('rtCusto').textContent = rapModoCliente ? ' ' : 'Material: '+fmt(custo)+'  |  margem '+db.config.margem+'%';
+  document.getElementById('rtFinal').textContent = fmt(finalRapido());
+}
+function toggleModoClienteRapido(){
+  rapModoCliente = !rapModoCliente;
+  document.getElementById('rtOlho').textContent = rapModoCliente ? '🙈 mostrar custo' : '👁 modo cliente';
+  atualizarTotalRapido();
+}
+function verOrcamentoRapido(){
+  const r = orcRap();
+  const itens = db.materiais.filter(m=> (r[m.id]||0)>0);
+  if(!itens.length){ alert('Adicione pelo menos um material com o botão +.'); return; }
+  const cliente = db.rapCliente || '—';
+  const total = finalRapido();
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  // documento do CLIENTE: só o valor redondo, sem custo nem margem
+  document.getElementById('rapOrc').innerHTML = `
+    <div id="orcDoc" style="margin-bottom:12px;">
+      <h3>${db.config.nome || 'Orçamento de marcenaria'}</h3>
+      <p class="muted">${hoje} · válido por ${db.config.validade} dias</p>
+      <p style="margin:10px 0 4px; font-weight:700;">Cliente: ${cliente}</p>
+      <div class="linha"><span>Móvel planejado sob medida</span><span></span></div>
+      <div class="linha"><span>Material, ferragens e mão de obra</span><span>incluído</span></div>
+      <div class="total">Total: ${fmt(total)}</div>
+      <div class="rodape">${db.config.nome ? db.config.nome+' · ' : ''}${db.config.fone ? 'WhatsApp: '+db.config.fone : ''}<br>Orçamento gerado com Orçamóvel.</div>
+    </div>`;
+  document.getElementById('rapOrc').scrollIntoView({behavior:'smooth'});
+  // botões de ação
+  document.getElementById('rapOrc').innerHTML += `
+    <button class="btn verde icon-btn" onclick="enviarWhatsRapido()"><span class="btn-ico"><svg class="app-icon"><use href="#icon-phone"></use></svg></span>Enviar no WhatsApp</button>
+    <button class="btn claro icon-btn" onclick="window.print()"><span class="btn-ico"><svg class="app-icon"><use href="#icon-print"></use></svg></span>Imprimir / salvar PDF</button>`;
+}
+function enviarWhatsRapido(){
+  const cliente = db.rapCliente || '—';
+  const total = finalRapido();
+  const txt =
+`*Orçamento — ${db.config.nome || 'Marcenaria'}*
+Cliente: ${cliente}
+
+Móvel planejado sob medida.
+Material, ferragens e mão de obra incluídos.
+
+*Total: ${fmt(total)}*
+Válido por ${db.config.validade} dias.${db.config.fone ? '\n\nWhatsApp: '+db.config.fone : ''}`;
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
 }
 
 /* ================== PROJETOS ================== */
@@ -921,6 +1045,26 @@ function carregarConfig(){
 function zerarTudo(){
   if(!confirm('Apagar TODOS os projetos, materiais e configurações?')) return;
   localStorage.removeItem('orcamovel'); location.reload();
+}
+function baixarBackup(){
+  const a = document.createElement('a');
+  const data = new Date().toISOString().slice(0,10);
+  a.download = 'orcamovel-backup-'+data+'.json';
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(db)], {type:'application/json'}));
+  a.click();
+}
+function restaurarBackup(ev){
+  const f = ev.target.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = e=>{
+    try{
+      const novo = JSON.parse(e.target.result);
+      if(!novo.materiais){ alert('Arquivo de backup inválido.'); return; }
+      if(!confirm('Restaurar este backup? Os dados atuais serão substituídos.')) return;
+      db = novo; salvar(); location.reload();
+    }catch(err){ alert('Não consegui ler o backup.'); }
+  };
+  rd.readAsText(f);
 }
 
 /* ================== ORÇAMENTO ================== */
