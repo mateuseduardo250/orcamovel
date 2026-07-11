@@ -64,6 +64,19 @@
   .mat-item .un{font-size:11px; color:var(--cinza); display:block; font-weight:400;}
   .mat-item input{width:92px; text-align:right;}
 
+  /* assinatura do contrato */
+  #assinaturaModal{display:none; position:fixed; inset:0; z-index:300; background:rgba(0,0,0,.55); align-items:center; justify-content:center; padding:16px;}
+  #assinaturaModal.show{display:flex;}
+  .ass-box{background:#fff; border-radius:14px; padding:16px; width:100%; max-width:520px; box-shadow:0 18px 50px rgba(0,0,0,.35);}
+  #assCanvas{width:100%; height:200px; border:2px dashed var(--madeira); border-radius:10px; background:#FDFBF7; touch-action:none; display:block;}
+
+  /* plano de corte */
+  .pc-chapa{background:#fff; border:1px solid var(--borda); border-radius:10px; padding:10px; margin:10px 0;}
+  .pc-chapa svg{width:100%; height:auto; display:block;}
+  .pc-tabela{width:100%; border-collapse:collapse; font-size:12.5px; margin-top:8px;}
+  .pc-tabela th,.pc-tabela td{border-bottom:1px solid var(--borda); padding:5px 6px; text-align:left;}
+  .pc-tabela th{color:var(--madeira-escura); font-size:11.5px;}
+
   /* orçamento rápido */
   .rap-item{display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--borda);}
   .rap-item:last-child{border-bottom:none;}
@@ -277,7 +290,20 @@
       <button class="btn icon-btn" onclick="addModulo()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-plus"></use></svg></span>Adicionar ao projeto</button>
     </div>
 
+    <div class="card">
+      <span class="badge">📚 MEUS MODELOS PRONTOS</span>
+      <p class="muted" style="margin:6px 0 8px;">Salve os móveis que você mais faz. Na casa do cliente, é só carregar e ajustar a medida.</p>
+      <div class="row">
+        <div style="flex:2"><select id="selModelo"></select></div>
+        <div><button class="btn mini claro" style="width:100%; margin:0;" onclick="carregarModelo()">Carregar</button></div>
+        <div><button class="btn mini vermelho" style="width:100%; margin:0;" onclick="excluirModelo()">✕</button></div>
+      </div>
+      <button class="btn claro" style="margin-top:8px;" onclick="salvarModelo()">💾 Salvar o módulo atual como modelo</button>
+    </div>
+
     <button class="btn verde icon-btn" onclick="verOrcamento()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-file"></use></svg></span>Gerar orçamento</button>
+    <button class="btn claro" onclick="verPlanoCorte()">🪚 Plano de corte</button>
+    <div id="planoCorte"></div>
     <button class="btn claro" onclick="mostrarTab('projetos')">← Voltar aos projetos</button>
   </section>
 
@@ -286,6 +312,7 @@
     <h2>Orçamento</h2>
     <div id="orcDoc"></div>
     <button class="btn verde icon-btn" onclick="enviarWhats()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-phone"></use></svg></span>Enviar no WhatsApp</button>
+    <button class="btn icon-btn" onclick="gerarContrato()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-file"></use></svg></span>📜 Gerar contrato pra assinar</button>
     <button class="btn claro icon-btn" onclick="window.print()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-print"></use></svg></span>Imprimir / salvar PDF</button>
     <button class="btn claro" onclick="mostrarTab('projeto')">← Voltar ao projeto</button>
   </section>
@@ -381,6 +408,10 @@
       <input id="cFone" placeholder="Ex.: 81 9 9999-9999" oninput="salvarConfig()">
       <label>Validade do orçamento (dias)</label>
       <input id="cValidade" type="number" value="10" oninput="salvarConfig()">
+      <label>Prazo de entrega padrão (dias)</label>
+      <input id="cPrazo" type="number" value="30" oninput="salvarConfig()">
+      <label>Condição de pagamento padrão</label>
+      <input id="cPagamento" value="50% de entrada e 50% na entrega" oninput="salvarConfig()">
     </div>
     <div class="card">
       <span class="badge">BACKUP 💾</span>
@@ -474,6 +505,20 @@
 </div>
 
 <!-- navegação -->
+<!-- assinatura com o dedo (contrato) -->
+<div id="assinaturaModal">
+  <div class="ass-box">
+    <b id="assTitulo" style="display:block; margin-bottom:8px; color:var(--madeira-escura);">Assinatura do cliente ✍️</b>
+    <p class="muted" style="margin-bottom:6px;">Assine no quadro abaixo com o dedo:</p>
+    <canvas id="assCanvas"></canvas>
+    <div style="display:flex; gap:8px; margin-top:10px;">
+      <button class="btn mini claro" style="margin:0;" onclick="assLimpar()">Limpar</button>
+      <button class="btn mini verde" style="flex:1; margin:0;" onclick="assConfirmar()">✓ Confirmar</button>
+      <button class="btn mini vermelho" style="margin:0;" onclick="assFechar()">✕</button>
+    </div>
+  </div>
+</div>
+
 <nav class="tabs">
   <button id="nav-projetos" class="active" onclick="mostrarTab('projetos')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-folder"></use></svg></span>Projetos</button>
   <button id="nav-projeto" onclick="mostrarTab('projeto')"><span class="ic icon-tile" aria-hidden="true"><svg class="app-icon"><use href="#icon-tools"></use></svg></span>Montar</button>
@@ -695,6 +740,7 @@ function mostrarTab(t){
   if(t==='projeto'){
     if(projetoAtual===null){ novoProjeto(); return; }
     renderModulos();
+    renderModelos();
   }
   calcular();
 }
@@ -1065,6 +1111,8 @@ function salvarConfig(){
   db.config.nome        = document.getElementById('cNome').value;
   db.config.fone        = document.getElementById('cFone').value;
   db.config.validade    = Number(document.getElementById('cValidade').value)||10;
+  db.config.prazo       = Number(document.getElementById('cPrazo').value)||30;
+  db.config.pagamento   = document.getElementById('cPagamento').value;
   salvar();
 }
 function carregarConfig(){
@@ -1074,6 +1122,8 @@ function carregarConfig(){
   document.getElementById('cNome').value        = db.config.nome;
   document.getElementById('cFone').value        = db.config.fone;
   document.getElementById('cValidade').value    = db.config.validade;
+  document.getElementById('cPrazo').value       = db.config.prazo || 30;
+  document.getElementById('cPagamento').value   = db.config.pagamento || '50% de entrada e 50% na entrega';
 }
 function zerarTudo(){
   if(!confirm('Apagar TODOS os projetos, materiais e configurações?')) return;
@@ -2538,6 +2588,205 @@ function arLimpar(){
   arSess = null; arHitSource = null; arColocados = [];
 }
 
+/* ================== MODELOS PRONTOS ================== */
+function renderModelos(){
+  const sel = document.getElementById('selModelo');
+  const ms = db.modelos||[];
+  sel.innerHTML = ms.length
+    ? ms.map((m,i)=>`<option value="${i}">${m.nomeModelo} (${medNum(m.L)}×${medNum(m.A)} ${unidade()})</option>`).join('')
+    : '<option value="">— nenhum modelo salvo —</option>';
+}
+function salvarModelo(){
+  const nome = prompt('Nome do modelo (ex.: Guarda-roupa 3 portas casal):');
+  if(!nome) return;
+  const m = lerModuloForm();
+  m.estr = modEstr ? JSON.parse(JSON.stringify(modEstr)) : undefined;
+  m.nomeModelo = nome;
+  (db.modelos = db.modelos||[]).push(m);
+  salvar(); renderModelos();
+  document.getElementById('selModelo').value = String(db.modelos.length-1);
+}
+function carregarModelo(){
+  const i = Number(document.getElementById('selModelo').value);
+  const m = (db.modelos||[])[i];
+  if(!m){ alert('Salve um modelo primeiro (💾).'); return; }
+  document.getElementById('mTipo').value = m.tipo||'aereo';
+  document.getElementById('mL').value = medNum(m.L);
+  document.getElementById('mA').value = medNum(m.A);
+  document.getElementById('mP').value = medNum(m.P);
+  document.getElementById('mPortas').value = m.portas||0;
+  document.getElementById('mPortaTipo').value = m.portaTipo||'giro';
+  modEstr = m.estr ? JSON.parse(JSON.stringify(m.estr)) : null;
+  camOcultas = {};
+  if(!modEstr) rebuildEstrutura(); else setInputsTotais();
+  desenhar(); renderCamEdit(); calcular();
+}
+function excluirModelo(){
+  const i = Number(document.getElementById('selModelo').value);
+  if(!(db.modelos||[])[i]) return;
+  if(!confirm('Excluir o modelo "'+db.modelos[i].nomeModelo+'"?')) return;
+  db.modelos.splice(i,1); salvar(); renderModelos();
+}
+
+/* ================== PLANO DE CORTE (v1) ================== */
+function pecasDoModulo(m, rotulo){
+  const es = m.estr||{};
+  const eC = es.espCorpo||15, eF = es.espFundo||6, eG = es.espGavFundo||6;
+  const tc = eC/10; // espessura em cm
+  const L=m.L, A=m.A, P=m.P;
+  const out = [];
+  const add=(nome,w,h,esp)=>{ if(w>0.5 && h>0.5) out.push({nome:(rotulo?rotulo+' ':'')+nome, w:Math.round(w*10)/10, h:Math.round(h*10)/10, esp}); };
+  const espPecas = es.esp||{};
+  const e=(k,def)=> (k in espPecas) ? espPecas[k] : def;
+  add('Lateral esq', A, P, e('lateral-esq',eC));
+  add('Lateral dir', A, P, e('lateral-dir',eC));
+  add('Tampo', L-2*tc, P, e('tampo',eC));
+  add('Base', L-2*tc, P, e('base',eC));
+  if(!es.semFundo) add('Fundo', L, A, e('fundo',eF));
+  const cols = (es.colunas&&es.colunas.length) ? es.colunas
+    : [{prats:Array.from({length:m.prat||0},(_,j)=>(j+1)/((m.prat||0)+1)), gav:m.gav||0, w:1}];
+  const nDiv = cols.length-1, vaoW = (L-2*tc)-nDiv*tc;
+  cols.forEach((c,ci)=>{
+    const cw = vaoW*(c.w||1/cols.length);
+    colPrats(c).forEach((fr,i)=> add('Prateleira c'+(ci+1), cw, P, e('prateleira-'+ci+'-'+i,eC)));
+    const gh = Math.min(25, A/6);
+    for(let i=0;i<(c.gav||0);i++){
+      add('Gav c'+(ci+1)+' frente', cw-1, gh-1.5, eC);
+      add('Gav c'+(ci+1)+' lateral', P-2, gh-3, eC);
+      add('Gav c'+(ci+1)+' lateral', P-2, gh-3, eC);
+      add('Gav c'+(ci+1)+' traseira', cw-1-2*tc, gh-3, eC);
+      add('Gav c'+(ci+1)+' fundo', cw-1, P-2, eG);
+    }
+    if(ci<nDiv) add('Divisória '+(ci+1), A-2*tc, P, e('divisoria-'+ci,eC));
+  });
+  for(let i=0;i<(m.portas||0);i++) add('Porta '+(i+1), (L/(m.portas||1))-0.8, A-1, e('porta-'+i,eC));
+  return out;
+}
+function empacotar(pecas, CW, CH){ // arruma as peças na chapa (prateleiras de corte)
+  const kerf=0.5, sheets=[];
+  const ord=[...pecas].sort((a,b)=>Math.max(b.w,b.h)-Math.max(a.w,a.h));
+  for(const p of ord){
+    let done=false;
+    for(const s of sheets){
+      for(const sh of s.shelves){
+        for(const [w,h] of [[p.w,p.h],[p.h,p.w]]){
+          if(h<=sh.h+0.01 && sh.x+w<=CW+0.01){ s.pecas.push({...p,x:sh.x,y:sh.y,rw:w,rh:h}); sh.x+=w+kerf; done=true; break; }
+        }
+        if(done)break;
+      }
+      if(!done){
+        for(const [w,h] of [[Math.max(p.w,p.h),Math.min(p.w,p.h)],[Math.min(p.w,p.h),Math.max(p.w,p.h)]]){
+          if(w<=CW+0.01 && s.y+h<=CH+0.01){ s.shelves.push({y:s.y,h:h,x:w+kerf}); s.pecas.push({...p,x:0,y:s.y,rw:w,rh:h}); s.y+=h+kerf; done=true; break; }
+        }
+      }
+      if(done)break;
+    }
+    if(!done){
+      const w0=Math.min(Math.max(p.w,p.h),CW), h0=Math.min(Math.min(p.w,p.h),CH);
+      sheets.push({shelves:[{y:0,h:h0,x:w0+kerf}], y:h0+kerf, pecas:[{...p,x:0,y:0,rw:w0,rh:h0}]});
+    }
+  }
+  return sheets;
+}
+function verPlanoCorte(){
+  const proj = (projetoAtual!==null) ? db.projetos[projetoAtual] : null;
+  const mods = (proj && proj.modulos && proj.modulos.length) ? proj.modulos : [lerModuloForm()];
+  let pecas=[];
+  mods.forEach((mm,i)=> pecas.push(...pecasDoModulo(mm, mods.length>1 ? 'M'+(i+1)+' ·' : '')));
+  if(!pecas.length){ alert('Monte um módulo primeiro.'); return; }
+  const porEsp={};
+  pecas.forEach(p=>{ (porEsp[p.esp]=porEsp[p.esp]||[]).push(p); });
+  let html = `<div class="card"><b style="color:var(--madeira-escura)">🪚 Plano de corte</b>
+    <p class="muted" style="margin:4px 0 6px;">v1 — medidas de peça calculadas da estrutura montada. <b>Confira antes de cortar!</b></p>
+    <table class="pc-tabela"><tr><th>Peça</th><th>medida 1 (cm)</th><th>medida 2 (cm)</th><th>Chapa</th></tr>`
+    + pecas.map(p=>`<tr><td>${p.nome}</td><td>${p.w}</td><td>${p.h}</td><td>${p.esp}mm</td></tr>`).join('')
+    + '</table></div>';
+  const CW=275, CH=185;
+  for(const esp in porEsp){
+    const sheets = empacotar(porEsp[esp], CW, CH);
+    sheets.forEach((s,si)=>{
+      const cores=['#C89B69','#9fc7a0','#a0b8c7','#c7a0b8','#c7bda0','#a0c7c0'];
+      let svg = `<svg viewBox="-2 -2 ${CW+4} ${CH+4}"><rect width="${CW}" height="${CH}" fill="#F5E9D6" stroke="#5C3A1A" stroke-width="1.5"/>`;
+      s.pecas.forEach((p,pi)=>{
+        svg += `<rect x="${p.x}" y="${p.y}" width="${p.rw}" height="${p.rh}" fill="${cores[pi%cores.length]}" fill-opacity=".78" stroke="#5C3A1A" stroke-width=".8"/>`;
+        if(p.rw>20 && p.rh>9){
+          svg += `<text x="${p.x+p.rw/2}" y="${p.y+p.rh/2}" text-anchor="middle" font-size="6.2" fill="#2B2B2B">${p.nome}</text>
+                  <text x="${p.x+p.rw/2}" y="${p.y+p.rh/2+7.5}" text-anchor="middle" font-size="5.5" fill="#555">${p.rw}×${p.rh}</text>`;
+        }
+      });
+      svg += '</svg>';
+      html += `<div class="pc-chapa"><b style="font-size:13px;">Chapa ${esp}mm — folha ${si+1}/${sheets.length} (2,75 × 1,85m)</b>${svg}</div>`;
+    });
+  }
+  document.getElementById('planoCorte').innerHTML = html;
+  document.getElementById('planoCorte').scrollIntoView({behavior:'smooth'});
+}
+
+/* ================== CONTRATO COM ASSINATURA ================== */
+let assCtx=null, assDesenhou=false, assResolve=null;
+function abrirAssinatura(titulo){
+  return new Promise(res=>{
+    assResolve = res;
+    document.getElementById('assTitulo').textContent = titulo;
+    document.getElementById('assinaturaModal').classList.add('show');
+    const cv = document.getElementById('assCanvas');
+    cv.width = cv.offsetWidth*2; cv.height = cv.offsetHeight*2; // nitidez
+    assCtx = cv.getContext('2d');
+    assCtx.lineWidth = 4; assCtx.lineCap = 'round'; assCtx.strokeStyle = '#1a2b6d';
+    assDesenhou = false;
+  });
+}
+(function(){ // desenhar no quadro com o dedo
+  const cv = document.getElementById('assCanvas');
+  let des = false;
+  const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX-r.left)*(cv.width/r.width), (e.clientY-r.top)*(cv.height/r.height)]; };
+  cv.addEventListener('pointerdown', e=>{ des=true; assDesenhou=true; const [x,y]=pos(e); assCtx.beginPath(); assCtx.moveTo(x,y); cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e=>{ if(!des) return; const [x,y]=pos(e); assCtx.lineTo(x,y); assCtx.stroke(); });
+  cv.addEventListener('pointerup', ()=> des=false);
+  cv.addEventListener('pointercancel', ()=> des=false);
+})();
+function assLimpar(){ const cv=document.getElementById('assCanvas'); assCtx.clearRect(0,0,cv.width,cv.height); assDesenhou=false; }
+function assFechar(){ document.getElementById('assinaturaModal').classList.remove('show'); if(assResolve){ assResolve(null); assResolve=null; } }
+function assConfirmar(){
+  if(!assDesenhou){ alert('Assine no quadro primeiro.'); return; }
+  const data = document.getElementById('assCanvas').toDataURL('image/png');
+  document.getElementById('assinaturaModal').classList.remove('show');
+  if(assResolve){ assResolve(data); assResolve=null; }
+}
+async function gerarContrato(){
+  if(projetoAtual===null || !db.projetos[projetoAtual] || !db.projetos[projetoAtual].modulos.length){
+    alert('Adicione módulos ao projeto e gere o orçamento primeiro.'); return;
+  }
+  const p = db.projetos[projetoAtual];
+  const c = calcularProjeto(p);
+  const assCliente = await abrirAssinatura('Assinatura do CLIENTE ✍️');
+  if(!assCliente) return;
+  const assMarc = await abrirAssinatura('Agora a SUA assinatura 🔨');
+  if(!assMarc) return;
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const prazo = db.config.prazo||30;
+  const pag = db.config.pagamento||'50% de entrada e 50% na entrega';
+  document.getElementById('orcDoc').innerHTML = `
+    <h3 style="text-align:center;">CONTRATO DE SERVIÇO DE MARCENARIA</h3>
+    <p class="muted" style="text-align:center;">${hoje}</p>
+    <p style="margin:10px 0;"><b>CONTRATADO:</b> ${db.config.nome||'________________'}${db.config.fone ? ' — WhatsApp: '+db.config.fone : ''}</p>
+    <p style="margin:10px 0;"><b>CONTRATANTE:</b> ${p.cliente||'________________'}</p>
+    <p style="margin:10px 0 4px;"><b>OBJETO — móvel(is) sob medida:</b></p>
+    ${p.modulos.map((m,i)=>`<div class="linha"><span>${TIPOS[m.tipo]?TIPOS[m.tipo].nome:'Módulo'} ${i+1} — ${medNum(m.L)}×${medNum(m.A)}×${medNum(m.P)} ${unidade()} · ${m.portas||0} porta(s), ${m.gav||0} gaveta(s)</span></div>`).join('')}
+    <div class="linha"><span>Material, ferragens, acabamento e mão de obra</span><span>incluídos</span></div>
+    <p style="margin:12px 0 4px; font-size:17px;"><b>VALOR TOTAL: ${fmt(c.final)}</b></p>
+    <p style="margin:6px 0;"><b>PAGAMENTO:</b> ${pag}</p>
+    <p style="margin:6px 0;"><b>PRAZO DE ENTREGA:</b> ${prazo} dias após a confirmação da entrada.</p>
+    <p class="muted" style="margin:8px 0; font-size:12px;">Alterações de projeto após a assinatura podem gerar custo e prazo adicionais, combinados entre as partes.</p>
+    <div style="display:flex; gap:16px; margin-top:20px;">
+      <div style="flex:1; text-align:center;"><img src="${assCliente}" style="max-width:100%; height:70px; object-fit:contain;"><div style="border-top:1px solid #555; font-size:12px; padding-top:4px;">${p.cliente||'Cliente'}</div></div>
+      <div style="flex:1; text-align:center;"><img src="${assMarc}" style="max-width:100%; height:70px; object-fit:contain;"><div style="border-top:1px solid #555; font-size:12px; padding-top:4px;">${db.config.nome||'Contratado'}</div></div>
+    </div>
+    <div class="rodape">Contrato gerado com Orçamóvel em ${hoje}.</div>`;
+  mostrarTab('orcamento');
+  alert('Contrato assinado e pronto! 📜 Use "Imprimir / salvar PDF" pra guardar e mandar pro cliente.');
+}
+
 /* ================== INICIALIZAÇÃO ================== */
 carregarConfig();
 document.getElementById('mUnidade').value = unidade();
@@ -2552,6 +2801,7 @@ if(unidade()!=='cm'){ // converte os valores iniciais (que estão em cm) pra uni
 rebuildEstrutura();
 renderProjetos();
 renderMateriais();
+renderModelos();
 desenhar();
 </script>
 </body>
