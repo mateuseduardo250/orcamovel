@@ -2188,9 +2188,15 @@ let arSess=null, arT=null, arRenderer=null, arScene=null, arCamera=null,
 
 function arPreencherTipos(){
   const sel = document.getElementById('arTipo');
-  sel.innerHTML = Object.keys(TIPOS).map(k=>`<option value="${k}">${TIPOS[k].nome} (${TIPOS[k].L}×${TIPOS[k].A}×${TIPOS[k].P}cm)</option>`).join('')
+  const proj = (projetoAtual!==null) ? db.projetos[projetoAtual] : null;
+  let ops = '<option value="atual">🔨 Módulo atual (como você montou)</option>';
+  if(proj && proj.modulos) proj.modulos.forEach((mm,i)=>{
+    ops += `<option value="proj${i}">📁 ${TIPOS[mm.tipo]?TIPOS[mm.tipo].nome:'Módulo'} ${i+1} do projeto (${medNum(mm.L)}×${medNum(mm.A)} ${unidade()})</option>`;
+  });
+  ops += Object.keys(TIPOS).map(k=>`<option value="${k}">${TIPOS[k].nome} (${TIPOS[k].L}×${TIPOS[k].A}×${TIPOS[k].P}cm)</option>`).join('')
     + '<option value="parede">📐 Parede de referência (grade 50cm)</option>';
-  sel.value = 'guarda';
+  sel.innerHTML = ops;
+  sel.value = 'atual';
 }
 
 function arAtualizaPreco(){
@@ -2289,23 +2295,96 @@ async function abrirAR(){
   const temQuickLook = aTest.relList && aTest.relList.supports && aTest.relList.supports('ar');
   if(temQuickLook){ await abrirARiPhone(); return; }
 
-  alert('Este aparelho não tem AR de verdade.\n\nAndroid: instale/atualize o "Google Play Services para AR" na Play Store e use o Chrome.\niPhone/iPad: use o Safari.\n\nEnquanto isso, o modo 📷 câmera funciona em qualquer aparelho.');
+  const diag = navigator.xr ? 'O navegador TEM WebXR, mas o aparelho não passou no teste de AR (falta o ARCore).' : 'O navegador NÃO tem WebXR (provavelmente não é o Chrome, ou é iPhone fora do Safari).';
+  alert('Este aparelho não abriu o AR de verdade.\n\nDiagnóstico: '+diag+'\n\nAndroid: 1) instale/atualize o "Google Play Services para AR" na Play Store, 2) abra este link no CHROME (não no navegador da Samsung/Xiaomi nem no navegador do WhatsApp).\niPhone/iPad: abra no SAFARI.\n\nEnquanto isso, o modo 📷 câmera funciona em qualquer aparelho.');
 }
 
 /* iPhone: gera o móvel 3D com as medidas reais e abre no visualizador nativo da Apple */
+/* constrói o móvel REAL (estrutura editada: colunas, prateleiras, gavetas, divisórias,
+   cabideiro, cor/fórmica, espessura, sem-fundo, tipo de porta) em metros pro AR */
+function arConstruirMovelReal(THREE, m){
+  const g = new THREE.Group();
+  const L=m.L/100, A=m.A/100, P=m.P/100;
+  const es = m.estr || {};
+  const t = Math.max(0.009, ((es.espCorpo)||15)/1000);
+  const tf = Math.max(0.003, ((es.espFundo)||6)/1000);
+  const baseHex = (es.formicaAll && es.formicaAll.c) || es.cor || '#C89B69';
+  const matExt = new THREE.MeshStandardMaterial({color:baseHex, roughness:.75});
+  const matInt = new THREE.MeshStandardMaterial({color:shade(baseHex, 0.12), roughness:.85});
+  const matEsc = new THREE.MeshStandardMaterial({color:0x3d2810, roughness:.6});
+  const matAlum = new THREE.MeshStandardMaterial({color:0xc9ccce, metalness:.6, roughness:.35});
+  const cx=(w,h,d,x,y,z,mat)=>{
+    const ms = new THREE.Mesh(new THREE.BoxGeometry(Math.max(w,.004), Math.max(h,.004), Math.max(d,.004)), mat);
+    ms.position.set(x,y,z); g.add(ms);
+  };
+  // carcaça (chão em y=0, frente em +z)
+  cx(t, A, P, -(L-t)/2, A/2, 0, matExt);
+  cx(t, A, P,  (L-t)/2, A/2, 0, matExt);
+  cx(L-2*t, t, P, 0, A-t/2, 0, matExt);
+  cx(L-2*t, t, P, 0, t/2, 0, matExt);
+  if(!es.semFundo) cx(L, A, tf, 0, A/2, -(P-tf)/2, matInt);
+  // colunas com conteúdo real
+  const cols = (es.colunas && es.colunas.length) ? es.colunas
+    : [{prats:Array.from({length:m.prat||0},(_,j)=>(j+1)/((m.prat||0)+1)), gav:m.gav||0, cab:false, w:1}];
+  const nDiv = cols.length-1;
+  const vaoW = (L-2*t) - nDiv*t;
+  let xa = -(L-2*t)/2;
+  cols.forEach((c,ci)=>{
+    const cw = vaoW*(c.w || 1/cols.length);
+    const xm = xa + cw/2, x1 = xa + cw;
+    colPrats(c).forEach(fr=>{ cx(cw, t, P-tf-0.005, xm, A*(1-fr), tf/2, matInt); });
+    const gh = Math.min(0.25, A/6);
+    for(let i=0;i<(c.gav||0);i++){ cx(cw-0.01, gh-0.015, t, xm, t+gh/2+i*gh, (P-t)/2+0.002, matExt); }
+    if(c.cab) cx(cw-0.01, 0.02, 0.02, xm, A*(1-(c.cabY==null?0.12:c.cabY)), 0, matEsc);
+    if(ci<nDiv) cx(t, A-2*t, P-tf-0.003, x1+t/2, A/2, tf/2, matExt);
+    xa = x1 + t;
+  });
+  // portas (fechadas)
+  const portas = m.portas||0;
+  if(portas>0 && m.portaTipo==='correr'){
+    const slice=L/portas, ov=0.03;
+    for(let i=0;i<portas;i++){
+      const frente=(i%2===0);
+      const z = (P+t)/2 + 0.004 - (frente?0:(t+0.005));
+      const xc = frente ? (-L/2 + i*slice + (slice+ov)/2) : (-L/2 + (i+1)*slice - (slice+ov)/2);
+      cx(slice+ov, A-0.006, t, Math.max(-L/2+(slice+ov)/2, Math.min(L/2-(slice+ov)/2, xc)), A/2, z, matExt);
+    }
+  } else if(portas>0){
+    const vao=L-2*t, pw=vao/portas-0.004;
+    for(let i=0;i<portas;i++){
+      const xc = -vao/2 + (i+0.5)*vao/portas;
+      cx(pw, A-2*t-0.006, t, xc, A/2, (P+t)/2+0.002, matExt);
+      if(!(es.puxadorTipo==='perfil')) cx(0.02, 0.1, 0.02, xc+((i%2===0)?0.35:-0.35)*pw, A/2, (P+t)/2+t, matEsc);
+    }
+    if(es.puxadorTipo==='perfil') cx(L-2*t, 0.02, 0.012, 0, A-t-0.02, (P+t)/2+0.012, matAlum);
+  }
+  return g;
+}
+
 async function abrirARiPhone(){
-  const m = lerModuloForm();
-  if(m.L<=0||m.A<=0||m.P<=0){ alert('Preencha as medidas do módulo primeiro.'); return; }
+  // leva TODOS os módulos do projeto (lado a lado); sem projeto, leva o módulo atual
+  const proj = (projetoAtual!==null) ? db.projetos[projetoAtual] : null;
+  const mods = (proj && proj.modulos && proj.modulos.length) ? proj.modulos : [lerModuloForm()];
+  if(!mods.length || mods.some(mm=>!(mm.L>0 && mm.A>0 && mm.P>0))){ alert('Preencha as medidas do módulo primeiro.'); return; }
   try{
     const THREE = await import('three');
     const {USDZExporter} = await import('three/addons/exporters/USDZExporter.js');
     const scene = new THREE.Scene();
-    scene.add(arConstruirMovel(THREE, m));
+    const gap = 0.03;
+    const totalW = mods.reduce((a,mm)=>a+mm.L/100, 0) + gap*(mods.length-1);
+    let x = -totalW/2, maxP = 0;
+    mods.forEach(mm=>{
+      const g = arConstruirMovelReal(THREE, mm);
+      g.position.x = x + (mm.L/100)/2;
+      x += mm.L/100 + gap;
+      maxP = Math.max(maxP, mm.P/100);
+      scene.add(g);
+    });
     if(document.getElementById('parInc').checked){
       const par = lerParede();
       if(par.L>0 && par.A>0){
         const parede = arConstruirParede(THREE, par.L, par.A);
-        parede.position.z = -(m.P/100)/2 - 0.02; // logo atrás do móvel
+        parede.position.z = -maxP/2 - 0.02; // logo atrás dos móveis
         scene.add(parede);
       }
     }
@@ -2317,7 +2396,7 @@ async function abrirARiPhone(){
     a.href = URL.createObjectURL(blob);
     a.click(); // abre o AR Quick Look
   }catch(e){
-    alert('Não consegui gerar o modelo 3D — verifica a internet e tenta de novo.');
+    alert('Não consegui gerar o modelo 3D ('+(e.message||e)+') — verifica a internet e tenta de novo.');
   }
 }
 
@@ -2363,7 +2442,7 @@ async function abrirARAndroid(){
     });
   }catch(e){
     arRenderer.domElement.remove();
-    alert('O celular recusou a sessão de AR. Fecha outros apps de câmera e tenta de novo.');
+    alert('O celular recusou a sessão de AR.\n\nMotivo técnico: '+(e.name||'')+' '+(e.message||e)+'\n\nChecklist:\n1. Instale/atualize "Google Play Services para AR" na Play Store\n2. Use o CHROME (não o navegador da Samsung/Xiaomi)\n3. Dê permissão de câmera ao Chrome\n4. Feche outros apps que usam câmera');
     return;
   }
   overlay.classList.add('show');
@@ -2400,21 +2479,44 @@ function arFixar(){
   }
   const THREE = arT;
   const tipo = document.getElementById('arTipo').value;
-  let g, custo = 0;
+  const proj = (projetoAtual!==null) ? db.projetos[projetoAtual] : null;
+  let g, custo = 0, profCm = 0;
   if(tipo === 'parede'){
     const par = lerParede();
     if(par.L<=0 || par.A<=0){ alert('Defina largura e altura da parede na aba Montar.'); return; }
     g = arConstruirParede(THREE, par.L, par.A); // parede não soma no preço
+  } else if(tipo === 'atual'){
+    const mm = lerModuloForm();
+    if(!(mm.L>0 && mm.A>0 && mm.P>0)){ alert('Preencha as medidas do módulo na aba Montar.'); return; }
+    g = arConstruirMovelReal(THREE, mm);   // o móvel COMO VOCÊ MONTOU
+    custo = calcularModulo(mm).custo;
+    profCm = mm.P;
+  } else if(tipo.startsWith('proj') && proj){
+    const mm = proj.modulos[Number(tipo.slice(4))];
+    if(!mm){ alert('Módulo do projeto não encontrado.'); return; }
+    g = arConstruirMovelReal(THREE, mm);
+    custo = calcularModulo(mm).custo;
+    profCm = mm.P;
   } else {
     const m = TIPOS[tipo];
     g = arConstruirMovel(THREE, m);
     custo = calcularModulo(m).custo;
+    profCm = m.P;
   }
   const pos = new THREE.Vector3().setFromMatrixPosition(arReticle.matrix);
-  g.position.copy(pos);
-  // vira a frente do móvel pra quem está segurando o celular
-  const camPos = new THREE.Vector3().setFromMatrixPosition(arCamera.matrixWorld);
-  g.rotation.y = Math.atan2(camPos.x - pos.x, camPos.z - pos.z);
+  // normal da superfície onde o círculo está (eixo Y da pose do hit-test)
+  const el = arReticle.matrix.elements;
+  const nrm = new THREE.Vector3(el[4], el[5], el[6]).normalize();
+  if(tipo!=='parede' && Math.abs(nrm.y) < 0.35 && profCm > 0){
+    // superfície VERTICAL = parede: encosta o fundo do móvel nela (aéreo!)
+    g.position.copy(pos).addScaledVector(nrm, (profCm/100)/2 + 0.005);
+    g.rotation.y = Math.atan2(nrm.x, nrm.z); // frente pra fora da parede
+  } else {
+    g.position.copy(pos);
+    // no chão: vira a frente do móvel pra quem está segurando o celular
+    const camPos = new THREE.Vector3().setFromMatrixPosition(arCamera.matrixWorld);
+    g.rotation.y = Math.atan2(camPos.x - pos.x, camPos.z - pos.z);
+  }
   arScene.add(g);
   arColocados.push({g, custo});
   if(navigator.vibrate) navigator.vibrate(30);
