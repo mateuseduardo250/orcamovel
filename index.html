@@ -478,6 +478,7 @@
       <button class="cam-btn" id="btnEditar" onclick="toggleCamEditMode()">✏️ Editar</button>
       <button class="cam-btn" onclick="menuMovel()">🎨</button>
       <button class="cam-btn" onclick="togglePortas()">🚪</button>
+      <button class="cam-btn" id="btnAncora" onclick="toggleAncora()">📌 Fixar</button>
       <button class="cam-btn" style="flex:1" onclick="tirarFoto()">📸 Foto</button>
     </div>
   </div>
@@ -1204,12 +1205,80 @@ let camS = 1; // escala px/cm do último render (pro arrasto de peças)
 let camCorCtx = null; // contexto do submenu de cores/fita
 const camCv = document.getElementById('camCanvas');
 
+/* ---- ÂNCORA 📌: giroscópio segura o móvel parado na parede (estilo óculos VR) ---- */
+let camAncora = null; // {ref:{h,p}, dYaw, dPitch} — orientação de referência e desvio atual
+let camEf = {rot:0.5, tilt:-0.1, dx:0, dy:0}; // visão efetiva = gestos + compensação da âncora
+
+function camPxPorRad(){ return Math.min(innerWidth, innerHeight)*0.8; } // ~campo de visão da câmera do celular
+function calcCamEf(){
+  if(!camAncora || !camAncora.ref){ camEf = {rot:cam3d.rot, tilt:cam3d.tilt, dx:0, dy:0}; return; }
+  const ppr = camPxPorRad();
+  camEf = {
+    rot:  cam3d.rot - camAncora.dYaw,
+    tilt: Math.max(-1.35, Math.min(1.35, cam3d.tilt - camAncora.dPitch)),
+    dx: -camAncora.dYaw*ppr,
+    dy:  camAncora.dPitch*ppr,
+  };
+}
+/* direção da câmera traseira no mundo → {h: bússola (rad), p: inclinação (rad)}
+   deviceorientation usa ângulos Z-X-Y (alpha/beta/gamma); a câmera traseira é o eixo -Z do aparelho */
+function giroDir(e){
+  const d = Math.PI/180, a=(e.alpha||0)*d, b=(e.beta||0)*d, g=(e.gamma||0)*d;
+  const cA=Math.cos(a), sA=Math.sin(a), sB=Math.sin(b), cB=Math.cos(b), cG=Math.cos(g), sG=Math.sin(g);
+  const vx = -(sG*cA + sB*cG*sA);
+  const vy = -(sG*sA - sB*cG*cA);
+  const vz = -(cB*cG);
+  return { h: Math.atan2(vx, vy), p: Math.asin(Math.max(-1, Math.min(1, vz))) };
+}
+function onGiro(e){
+  if(!camAncora) return;
+  if(e.alpha==null && e.beta==null && e.gamma==null) return;
+  const hp = giroDir(e);
+  if(!camAncora.ref){ camAncora.ref = hp; return; } // primeira leitura = referência (onde fixou)
+  let dY = hp.h - camAncora.ref.h;
+  if(dY >  Math.PI) dY -= 2*Math.PI;
+  if(dY < -Math.PI) dY += 2*Math.PI;
+  camAncora.dYaw = dY;
+  camAncora.dPitch = hp.p - camAncora.ref.p;
+  renderCam();
+}
+async function toggleAncora(){
+  if(camAncora){ soltarAncora(); return; }
+  try{
+    if(window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission){
+      const r = await DeviceOrientationEvent.requestPermission(); // iPhone: pede "Movimento e orientação"
+      if(r !== 'granted'){ alert('Pra fixar o móvel na parede, toque em "Permitir" quando o Safari pedir acesso a Movimento e Orientação.'); return; }
+    }
+  }catch(err){ alert('Não consegui ligar o sensor de movimento: '+err.message); return; }
+  camAncora = {ref:null, dYaw:0, dPitch:0};
+  window.addEventListener('deviceorientation', onGiro);
+  document.getElementById('btnAncora').style.background = 'rgba(46,204,113,.45)';
+  document.getElementById('camLabel').textContent = '📌 Fixado! Mexa o celular — o móvel fica parado na parede. Toque 📌 de novo pra soltar.';
+  setTimeout(()=>{ // sem giroscópio (PC, aparelho antigo): avisa e desliga
+    if(camAncora && !camAncora.ref){ soltarAncora(); alert('Este aparelho não informa o movimento (sem giroscópio). No celular funciona.'); }
+  }, 1500);
+}
+function soltarAncora(){
+  if(camAncora && camAncora.ref){ // guarda a posição atual nos gestos pro móvel não pular
+    const ppr = camPxPorRad();
+    cam3d.rot -= camAncora.dYaw;
+    cam3d.tilt = Math.max(-0.9, Math.min(0.9, cam3d.tilt - camAncora.dPitch));
+    cam3d.x   -= camAncora.dYaw*ppr;
+    cam3d.y   += camAncora.dPitch*ppr;
+  }
+  camAncora = null;
+  window.removeEventListener('deviceorientation', onGiro);
+  const b = document.getElementById('btnAncora'); if(b) b.style.background = 'rgba(255,255,255,.15)';
+  if(!camEditMode){ const l = document.getElementById('camLabel'); if(l) l.textContent = '👆 Toque na porta/gaveta = abre · 🖐 arraste = girar · ✊ segure = mover'; }
+  renderCam();
+}
+
 /* projeção 3D em perspectiva (rotação Y + leve inclinação X) */
 function projetar(x, y, z, s, cx, cy){
-  const cos = Math.cos(cam3d.rot), sin = Math.sin(cam3d.rot);
+  const cos = Math.cos(camEf.rot), sin = Math.sin(camEf.rot);
   const X = (x*cos + z*sin) * s;
   const Zr = (-x*sin + z*cos) * s;
-  const tilt = cam3d.tilt, cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+  const tilt = camEf.tilt, cosT = Math.cos(tilt), sinT = Math.sin(tilt);
   const Y = (y*s)*cosT - Zr*sinT;
   const Z = (y*s)*sinT + Zr*cosT;
   const d = 1300, f = d/(d+Z);
@@ -1296,9 +1365,10 @@ function boxFaces(x1,x2,y1,y2,z1,z2,cor){
 
 function desenhaMovel3D(ctx, W, H){
   const m = lerModuloForm();
+  calcCamEf(); // aplica a âncora do giroscópio (se fixado)
   // escala fixada na abertura da câmera: mudar medidas muda SÓ a peça, não o zoom
   const s = (Math.min(W,H)*0.55/(cam3d.norm || Math.max(m.L, m.A))) * cam3d.s;
-  const cx = W/2 + cam3d.x, cy = H/2 + cam3d.y;
+  const cx = W/2 + cam3d.x + camEf.dx, cy = H/2 + cam3d.y + camEf.dy;
   const hw = m.L/2, hh = m.A/2, hd = m.P/2;
   const FE = 1.6; // fator visual (mm→cm exagerado pra dar pra ver a diferença)
   const t  = ((m.estr && m.estr.espCorpo) || 15)/10 * FE; // espessura das tábuas
@@ -1589,6 +1659,8 @@ async function abrirCamera(){
   const m = lerModuloForm();
   if(m.L<=0||m.A<=0){ alert('Preencha as medidas do módulo primeiro.'); return; }
   cam3d = {x:0, y:0, s:1, rot:0.5, tilt:-0.1, norm:Math.max(m.L, m.A)};
+  camAncora = null; window.removeEventListener('deviceorientation', onGiro); // âncora sempre começa solta
+  const ba = document.getElementById('btnAncora'); if(ba) ba.style.background = 'rgba(255,255,255,.15)';
   camVis = {portas:true, gavetas:true, prateleiras:true, fundo:true, tampo:true, base:true, laterais:true};
   camConstr = {tampo:false, base:false};
   camAnim = {portas:{}, gavetas:{}}; camAnimTarget = {portas:{}, gavetas:{}};
@@ -1616,6 +1688,7 @@ async function abrirCamera(){
   }
 }
 function fecharCamera(){
+  if(camAncora) soltarAncora();
   if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream = null; }
   document.getElementById('camVideo').srcObject = null;
   document.getElementById('camView').classList.remove('show');
@@ -2102,7 +2175,7 @@ camCv.addEventListener('pointerdown', e=>{
           const lista = p.grupo==='div' ? (e.divs[p.divIdx]||[]) : e[p.grupo];
           camDrag.v0 = lista[p.idx] ? (lista[p.idx].pos||0) : 0;
           // direção da profundidade na tela (pra onde 1cm de fundo aponta em pixels)
-          const cx = innerWidth/2 + cam3d.x, cy = innerHeight/2 + cam3d.y;
+          const cx = innerWidth/2 + cam3d.x + camEf.dx, cy = innerHeight/2 + cam3d.y + camEf.dy;
           const a = projetar(0,0,0,camS,cx,cy), b = projetar(0,0,10,camS,cx,cy);
           camDrag.zv = {x:(b.x-a.x)/10, y:(b.y-a.y)/10};
         }
@@ -2143,7 +2216,7 @@ camCv.addEventListener('pointermove', e=>{
   }
   if(camDrag.mode==='peca'){ // arrastando uma peça do móvel
     const p = camDrag.part, cols = modEstr.colunas, m = lerModuloForm();
-    let cosR = Math.cos(cam3d.rot);
+    let cosR = Math.cos(camEf.rot);
     cosR = (cosR>=0 ? 1 : -1) * Math.max(0.35, Math.abs(cosR));
     if(p.tipo==='prateleira'){
       const dFr = (dy/camS) / Math.max(1, m.A); // px -> cm -> fração da altura
