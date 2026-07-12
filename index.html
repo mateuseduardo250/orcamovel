@@ -285,6 +285,7 @@
       <label style="display:flex; align-items:center; gap:6px; font-weight:400; margin-top:8px;">
         <input type="checkbox" id="parInc" style="width:auto;"> Incluir parede de referência no AR (grade de 50cm)
       </label>
+      <button class="btn claro" style="margin-top:8px;" onclick="ajustarAoVao()">📐 Encaixar o móvel neste vão (remodela tudo)</button>
       <button class="btn claro icon-btn" onclick="abrirCamera()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-camera"></use></svg></span>Ver no ambiente — "holograma"</button>
       <button class="btn claro icon-btn" onclick="abrirAR()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-cube"></use></svg></span>Modo VR — fixar móveis no quarto (beta)</button>
       <button class="btn icon-btn" onclick="addModulo()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-plus"></use></svg></span>Adicionar ao projeto</button>
@@ -312,7 +313,8 @@
     <h2>Orçamento</h2>
     <div id="orcDoc"></div>
     <button class="btn verde icon-btn" onclick="enviarWhats()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-phone"></use></svg></span>Enviar no WhatsApp</button>
-    <button class="btn icon-btn" onclick="gerarContrato()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-file"></use></svg></span>📜 Gerar contrato pra assinar</button>
+    <button class="btn icon-btn" onclick="gerarContrato(true)"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-file"></use></svg></span>📜 Contrato — assinar na tela</button>
+    <button class="btn icon-btn" onclick="gerarContrato(false)"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-print"></use></svg></span>🖨 Contrato em papel — assinar de caneta</button>
     <button class="btn claro icon-btn" onclick="window.print()"><span class="btn-ico" aria-hidden="true"><svg class="app-icon"><use href="#icon-print"></use></svg></span>Imprimir / salvar PDF</button>
     <button class="btn claro" onclick="mostrarTab('projeto')">← Voltar ao projeto</button>
   </section>
@@ -2588,6 +2590,20 @@ function arLimpar(){
   arSess = null; arHitSource = null; arColocados = [];
 }
 
+/* ================== ENCAIXAR NO VÃO ================== */
+function ajustarAoVao(){
+  // mede o vão com a trena, digita nos campos 📐 Parede, e o móvel se remodela inteiro
+  const pl = Number(document.getElementById('parL').value)||0;
+  const pa = Number(document.getElementById('parA').value)||0;
+  if(pl<=0 && pa<=0){ alert('Digite a largura e/ou altura do vão nos campos 📐 Parede acima.'); return; }
+  if(pl>0) document.getElementById('mL').value = pl;
+  if(pa>0) document.getElementById('mA').value = pa;
+  // a estrutura é proporcional (colunas e prateleiras em frações) → se remodela sozinha
+  desenhar(); renderCamEdit(); calcular();
+  if(navigator.vibrate) navigator.vibrate(20);
+  alert('Móvel remodelado pro vão de '+(pl||'—')+' × '+(pa||'—')+' '+unidade()+'.\nColunas, prateleiras e preço se ajustaram juntos. Confira e ajuste a folga se quiser.');
+}
+
 /* ================== MODELOS PRONTOS ================== */
 function renderModelos(){
   const sel = document.getElementById('selModelo');
@@ -2753,16 +2769,19 @@ function assConfirmar(){
   document.getElementById('assinaturaModal').classList.remove('show');
   if(assResolve){ assResolve(data); assResolve=null; }
 }
-async function gerarContrato(){
+async function gerarContrato(digital){
   if(projetoAtual===null || !db.projetos[projetoAtual] || !db.projetos[projetoAtual].modulos.length){
     alert('Adicione módulos ao projeto e gere o orçamento primeiro.'); return;
   }
   const p = db.projetos[projetoAtual];
   const c = calcularProjeto(p);
-  const assCliente = await abrirAssinatura('Assinatura do CLIENTE ✍️');
-  if(!assCliente) return;
-  const assMarc = await abrirAssinatura('Agora a SUA assinatura 🔨');
-  if(!assMarc) return;
+  let assCliente = null, assMarc = null;
+  if(digital !== false){ // assinar na tela; no papel, saem linhas pra caneta
+    assCliente = await abrirAssinatura('Assinatura do CLIENTE ✍️');
+    if(!assCliente) return;
+    assMarc = await abrirAssinatura('Agora a SUA assinatura 🔨');
+    if(!assMarc) return;
+  }
   const hoje = new Date().toLocaleDateString('pt-BR');
   const prazo = db.config.prazo||30;
   const pag = db.config.pagamento||'50% de entrada e 50% na entrega';
@@ -2778,13 +2797,15 @@ async function gerarContrato(){
     <p style="margin:6px 0;"><b>PAGAMENTO:</b> ${pag}</p>
     <p style="margin:6px 0;"><b>PRAZO DE ENTREGA:</b> ${prazo} dias após a confirmação da entrada.</p>
     <p class="muted" style="margin:8px 0; font-size:12px;">Alterações de projeto após a assinatura podem gerar custo e prazo adicionais, combinados entre as partes.</p>
-    <div style="display:flex; gap:16px; margin-top:20px;">
-      <div style="flex:1; text-align:center;"><img src="${assCliente}" style="max-width:100%; height:70px; object-fit:contain;"><div style="border-top:1px solid #555; font-size:12px; padding-top:4px;">${p.cliente||'Cliente'}</div></div>
-      <div style="flex:1; text-align:center;"><img src="${assMarc}" style="max-width:100%; height:70px; object-fit:contain;"><div style="border-top:1px solid #555; font-size:12px; padding-top:4px;">${db.config.nome||'Contratado'}</div></div>
+    <div style="display:flex; gap:16px; margin-top:${assCliente ? 20 : 60}px;">
+      <div style="flex:1; text-align:center;">${assCliente ? `<img src="${assCliente}" style="max-width:100%; height:70px; object-fit:contain;">` : '<div style="height:40px;"></div>'}<div style="border-top:1px solid #555; font-size:12px; padding-top:4px;">${p.cliente||'Cliente'}</div></div>
+      <div style="flex:1; text-align:center;">${assMarc ? `<img src="${assMarc}" style="max-width:100%; height:70px; object-fit:contain;">` : '<div style="height:40px;"></div>'}<div style="border-top:1px solid #555; font-size:12px; padding-top:4px;">${db.config.nome||'Contratado'}</div></div>
     </div>
     <div class="rodape">Contrato gerado com Orçamóvel em ${hoje}.</div>`;
   mostrarTab('orcamento');
-  alert('Contrato assinado e pronto! 📜 Use "Imprimir / salvar PDF" pra guardar e mandar pro cliente.');
+  alert(assCliente
+    ? 'Contrato assinado e pronto! 📜 Use "Imprimir / salvar PDF" pra guardar e mandar pro cliente.'
+    : 'Contrato em papel pronto! 🖨 Use "Imprimir / salvar PDF", leve impresso e o cliente assina de caneta nas linhas.');
 }
 
 /* ================== INICIALIZAÇÃO ================== */
