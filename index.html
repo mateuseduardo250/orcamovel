@@ -2714,8 +2714,8 @@ function verPlanoCorte(){
   pecas.forEach(p=>{ (porEsp[p.esp]=porEsp[p.esp]||[]).push(p); });
   let html = `<div class="card"><b style="color:var(--madeira-escura)">🪚 Plano de corte</b>
     <p class="muted" style="margin:4px 0 6px;">v1 — medidas de peça calculadas da estrutura montada. <b>Confira antes de cortar!</b></p>
-    <table class="pc-tabela"><tr><th>Peça</th><th>medida 1 (cm)</th><th>medida 2 (cm)</th><th>Chapa</th></tr>`
-    + pecas.map(p=>`<tr><td>${p.nome}</td><td>${p.w}</td><td>${p.h}</td><td>${p.esp}mm</td></tr>`).join('')
+    <table class="pc-tabela"><tr><th>Peça</th><th>medida 1 (mm)</th><th>medida 2 (mm)</th><th>Chapa</th></tr>`
+    + pecas.map(p=>`<tr><td>${p.nome}</td><td>${Math.round(p.w*10)}</td><td>${Math.round(p.h*10)}</td><td>${p.esp}mm</td></tr>`).join('')
     + '</table></div>';
   const CW=275, CH=185;
   for(const esp in porEsp){
@@ -2727,7 +2727,7 @@ function verPlanoCorte(){
         svg += `<rect x="${p.x}" y="${p.y}" width="${p.rw}" height="${p.rh}" fill="${cores[pi%cores.length]}" fill-opacity=".78" stroke="#5C3A1A" stroke-width=".8"/>`;
         if(p.rw>20 && p.rh>9){
           svg += `<text x="${p.x+p.rw/2}" y="${p.y+p.rh/2}" text-anchor="middle" font-size="6.2" fill="#2B2B2B">${p.nome}</text>
-                  <text x="${p.x+p.rw/2}" y="${p.y+p.rh/2+7.5}" text-anchor="middle" font-size="5.5" fill="#555">${p.rw}×${p.rh}</text>`;
+                  <text x="${p.x+p.rw/2}" y="${p.y+p.rh/2+7.5}" text-anchor="middle" font-size="5.5" fill="#555">${Math.round(p.rw*10)}×${Math.round(p.rh*10)}</text>`;
         }
       });
       svg += '</svg>';
