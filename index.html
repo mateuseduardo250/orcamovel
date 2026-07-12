@@ -1209,7 +1209,19 @@ const camCv = document.getElementById('camCanvas');
 let camAncora = null; // {ref:{h,p}, dYaw, dPitch} — orientação de referência e desvio atual
 let camEf = {rot:0.5, tilt:-0.1, dx:0, dy:0}; // visão efetiva = gestos + compensação da âncora
 
-function camPxPorRad(){ return Math.min(innerWidth, innerHeight)*0.8; } // ~campo de visão da câmera do celular
+/* pixels de tela por radiano de giro — calculado do vídeo REAL da câmera:
+   focal em px = (lado maior do vídeo / 2) / tan(FOV/2), corrigido pelo recorte
+   do object-fit:cover que estica o vídeo pra cobrir a tela inteira */
+function camPxPorRad(){
+  const v = document.getElementById('camVideo');
+  if(v && v.videoWidth){
+    const fov = 64*Math.PI/180; // campo de visão típico da câmera principal do celular
+    const f = (Math.max(v.videoWidth, v.videoHeight)/2) / Math.tan(fov/2);
+    const escala = Math.max(innerWidth/v.videoWidth, innerHeight/v.videoHeight);
+    return f*escala;
+  }
+  return Math.max(innerWidth, innerHeight)*1.15; // sem câmera: estimativa
+}
 function calcCamEf(){
   if(!camAncora || !camAncora.ref){ camEf = {rot:cam3d.rot, tilt:cam3d.tilt, dx:0, dy:0}; return; }
   const ppr = camPxPorRad();
@@ -1238,8 +1250,9 @@ function onGiro(e){
   let dY = hp.h - camAncora.ref.h;
   if(dY >  Math.PI) dY -= 2*Math.PI;
   if(dY < -Math.PI) dY += 2*Math.PI;
-  camAncora.dYaw = dY;
-  camAncora.dPitch = hp.p - camAncora.ref.p;
+  const k = 0.45; // suaviza a tremida do sensor sem atrasar o movimento
+  camAncora.dYaw   += (dY - camAncora.dYaw)*k;
+  camAncora.dPitch += ((hp.p - camAncora.ref.p) - camAncora.dPitch)*k;
   renderCam();
 }
 async function toggleAncora(){
